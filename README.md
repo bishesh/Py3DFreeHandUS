@@ -5,7 +5,7 @@ Py3DFreeHandUS
 
 Archive *Py3DFreeHandUS.rar* contains source code and doc.
 
-Folder *samples* contains demo data and script.
+Folder *samples* contains demo data, script and videos.
 
 HTML doc is in Py3DFreeHandUS/sphinx/_build/html/index.html
 

@@ -1,7 +1,7 @@
 Py3DFreeHandUS
 ==============
 
-**General-purpose Python library for 3D free-hand ultra-sound measurements**.
+**A Python library for 3D free-hand ultra-sound measurements**.
 
 Archive *Py3DFreeHandUS.zip* contains source code and doc.
 

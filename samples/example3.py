@@ -40,10 +40,10 @@ if __name__ == "__main__":
         c.calculatePoseForUSProbe(mkrList=('Rigid_Body_1-Marker_3','Rigid_Body_1-Marker_4','Rigid_Body_1-Marker_1','Rigid_Body_1-Marker_2'))
         
         # Extract 1 point from the phantom line in the US images
-        c.extractFeatureFromUSImages(feature='1_point', segmentation='manual', featuresFile=featuresFile)
+        c.extractFeatureFromUSImages(feature='1_point', segmentation='manual', showViewer=False, featuresFile=featuresFile)
         
         # Estimate devices delay
-        c.calculateDevicesTimeDelay(method='vert_motion_sync', vertCoordIdx=2, showGraphs=False)
+        c.calculateDevicesTimeDelay(method='vert_motion_sync', vertCoordIdx=2, showGraphs=True)
         
         # And get it
         timeDelays.append(c.getDevicesTimeDelay())
@@ -85,6 +85,8 @@ if __name__ == "__main__":
     args = {}
     args['sweep_frames'] = [[20,70,140],[230,420]]
     args['imag_comp_save_path'] = 'figs'    # make sure this folder already exists
+    args['th_z'] = .1
+    args['max_expr'] = 'weighted_avg_NCC'
     c.calibrateProbe(init, method='maximize_NCC', method_args=args, correctResults=False)
     
     # And get it

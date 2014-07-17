@@ -40,6 +40,8 @@ if __name__ == "__main__":
     args = {}
     args['sweep_frames'] = [[50,90],[250,450]]
     args['imag_comp_save_path'] = 'figs'    # make sure this folder already exists
+    args['th_z'] = .1
+    args['max_expr'] = 'weighted_avg_NCC'
     c.calibrateProbe(init, method='maximize_NCC', method_args=args, correctResults=False)
     
     # And get it

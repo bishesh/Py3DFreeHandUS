@@ -31,7 +31,29 @@ if __name__ == "__main__":
     c.calculatePoseForUSProbe(mkrList=('Rigid_Body_1-Marker_1','Rigid_Body_1-Marker_2','Rigid_Body_1-Marker_3','Rigid_Body_1-Marker_4'))
     
     # Extract 2 points from the phantom line in the US images
-    c.extractFeatureFromUSImages(feature='2_points_on_line', segmentation='manual', featuresFile='cal3.fea')    # remove 'featuresFile' argument to pop-up features extraction window on US file
+    
+    # --- semi-automatic    
+    
+    parSeg = {}
+    parSeg['thI'] = 0.1
+    parSeg['thCan1'] = 50
+    parSeg['thCan2'] = 150
+    parSeg['kerSizeCan'] = 5
+    parSeg['kerSizeDil'] = [3, 3]
+    parSeg['thHou'] = 100
+    parSeg['minLineLength'] = 10
+    parSeg['maxLineGap'] = 10    
+    
+    segParams = {}
+    segParams['par_seg'] = parSeg
+    segParams['data_constr'] = [{'xPct':0.2},{'xPct':0.8}]
+    segParams['save_data_path'] = 'auto_extract_points' # must be an existing folder
+
+    c.extractFeatureFromUSImages(feature='2_points_on_line', segmentation='auto_hough', segParams=segParams, showViewer=True)
+
+    # --- manual   
+    
+    #c.extractFeatureFromUSImages(feature='2_points_on_line', segmentation='manual', showViewer=True, featuresFile='cal3.fea')
     
     # Estimate: (i) the pose of the US image plane in the markers-based reference frame on the US probe;
     # (ii) the pixel-to-mm factor of the US image (sx, sy)

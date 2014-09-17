@@ -92,6 +92,10 @@ if __name__ == "__main__":
     # And get it
     prRim, Tim, sx, sy, calib = c.getProbeCalibrationData()
     
+    # This is how to evaluate roto-translation matrix from existing parameters
+    calPars = {'x1':14.55,'y1':-88.46,'z1':-19.76,'alpha1':np.deg2rad(-12.62),'beta1':np.deg2rad(0.00235),'gamma1':np.deg2rad(-153.86)}
+    prRim, Tim = c.evalCalibMatrix(calPars)
+    
     # Free some memory
     del c
   

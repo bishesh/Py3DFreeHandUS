@@ -72,6 +72,7 @@ if __name__ == "__main__":
     # Free some memory
     del c
     
+
     
     
     # --- CALIBRATION ACCURACY ESTIMATION
@@ -181,14 +182,14 @@ if __name__ == "__main__":
     
     # Allocate space for voxel array
     #p.initVoxelArray(convR=np.eye(4), fxyz=(5,1,5))
-    p.initVoxelArray(convR=T, fxyz=(1,10,1))
+    p.initVoxelArray(convR=T, fxyz=(1,10,1), voxFrames='all')
     #p.initVoxelArray(convR='auto_PCA', fxyz=(1,10,10))
     
     # Set path for US DICOM files
     p.setUSFiles(('test_baloon2ang_Mevis.dcm',))
     
     # Set parameters for calculating US images sequence wrapper (or silhouette)
-    p.setUSImagesAlignmentParameters(wrapper='convex_hull', step=2)
+    p.setUSImagesAlignmentParameters(wrapper='convex_hull', step=2, fillVoxMethod='avg')
     
     # Align each US image of each file in the space (will take a bit ...)
     p.alignUSImages()

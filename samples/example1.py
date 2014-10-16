@@ -261,7 +261,7 @@ if __name__ == "__main__":
     p.alignUSImages()
     
     # Set parameters for gap filling (into the wrapped seauence)
-    #p.setGapFillingParameters(method='VNN', blocksN=10)
+    #p.setGapFillingParameters(method='VNN', blocksN=100, blockDir='X', distTh=None)
     
     # Fill gaps (go sipping a coffee ...)
     #p.fillGaps()

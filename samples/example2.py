@@ -35,14 +35,21 @@ if __name__ == "__main__":
     # Calculate pose from US probe to laboratory reference frame
     c.calculatePoseForUSProbe(mkrList=('Rigid_Body_1-Marker_1','Rigid_Body_1-Marker_2','Rigid_Body_1-Marker_3','Rigid_Body_1-Marker_4'))
 
+    # Extract mask on NCC original images (optional)
+    # ATTENTION: selecte frames 16 and 91, not 15 and 90!
+    segParams = {}
+    segParams['selectorType'] = 'lasso'
+    segParams['width'] = 5
+    c.extractFeatureFromUSImages(feature='mask', segParams=segParams, featuresFile='mask.fea', showViewer=True)
+
     # Estimate the pose of the US image plane in the markers-based reference frame on the US probe
     init = {'x1':20.,'y1':-90.,'z1':-20.,'alpha1':np.deg2rad(-10.),'beta1':np.deg2rad(0.),'gamma1':np.deg2rad(-160.)}
     args = {}
-    args['sweep_frames'] = [[50,90],[250,450]]
+    args['sweep_frames'] = [[15, 90],[250,450]]
     args['imag_comp_save_path'] = 'figs'    # make sure this folder already exists
     args['th_z'] = .1
     args['max_expr'] = 'weighted_avg_NCC'
-    c.calibrateProbe(init, method='maximize_NCC', method_args=args, correctResults=False)
+    c.calibrateProbe(init, method='maximize_NCCfast', method_args=args, correctResults=False)
     
     # And get it
     prRim, Tim, sx, sy, calib = c.getProbeCalibrationData()

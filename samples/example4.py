@@ -6,7 +6,7 @@ Created on Thu Feb 20 10:51:02 2014
 """
 
 from Py3DFreeHandUS import process
-from Py3DFreeHandUS.kine import getVersor
+from Py3DFreeHandUS.kine import *
 import numpy as np
 
 
@@ -40,7 +40,13 @@ if __name__ == "__main__":
                'Rigid_Body_2-Marker_2',
                'Rigid_Body_2-Marker_3')
                
-    def globPoseFun(mkrs, mkrList):
+    # Probe referene frame function definition
+    def rigidProbeClusterFun(mkrs, mkrList, args):
+        
+        return rigidBodySVDFun(mkrs, mkrList[:4], args)
+               
+    # Leg reference frame function definition
+    def legPoseFun(mkrs, mkrList):
         
         # Define markers to use
         MM = mkrs['Rigid_Body_2-Marker_1']
@@ -60,15 +66,35 @@ if __name__ == "__main__":
         
         # Return data
         return R, O
+     
+    # Coordinates of probe markers in rigid probe reference frame. These have 
+    # to be computed from a kienamtic acquisition where markers are well visible
+    markersLoc = {}
+    markersLoc['Rigid_Body_1-Marker_1'] = np.array([ -7.67213079,  78.5869874 ,   3.87184955])
+    markersLoc['Rigid_Body_1-Marker_2'] = np.array([  1.14228084e+02,   6.60250982e+01,  -1.70530257e-13])
+    markersLoc['Rigid_Body_1-Marker_3'] = np.array([  1.13686838e-13,   1.13686838e-13,  -1.13686838e-13])
+    markersLoc['Rigid_Body_1-Marker_4'] = np.array([  1.06743117e+02,   1.66977543e-13,  -1.42108547e-13])
+    args = {}
+    args['mkrsLoc'] = markersLoc
+
+    # Declare which US probe reference function to use
+    #USProbePoseFun = 'default'
+    USProbePoseFun = rigidProbeClusterFun
+    
+    # Declare which global reference function to use
+    #globPoseFun = None
+    globPoseFun = legPoseFun
         
-    #p.calculatePoseForUSProbe(mkrList=mkrList, globPoseFun=globPoseFun)
-    p.calculatePoseForUSProbe(mkrList=mkrList, globPoseFun=None, showMarkers=True)
+    # Calculate pose US probe
+    p.calculatePoseForUSProbe(mkrList=mkrList, USProbePoseFun=USProbePoseFun, USProbePoseFunArgs=args, globPoseFun=globPoseFun, showMarkers=False)
 
     # Calculate pose from US images to laboratory reference frame
     p.calculatePoseForUSImages()
     
     # Allocate space for voxel array
-    p.initVoxelArray(convR='auto_PCA', fxyz=(1,6,6))
+    fxyz = 'auto_bounded_parallel_scans'
+    #fxyz = (1,6,6)
+    p.initVoxelArray(convR='auto_PCA', fxyz=fxyz)
     
     # Set path for US DICOM files
     p.setUSFiles(('arthur9_Mevis.dcm',))
@@ -88,7 +114,9 @@ if __name__ == "__main__":
     #p.fillGaps()
     
     # Set properties for the vtkImageData objects that will exported just below
-    p.setVtkImageDataProperties(sxyz=(6,1,1))
+    sxyz = 'auto'
+    #sxyz = (6,1,1)
+    p.setVtkImageDataProperties(sxyz=sxyz)
     
     # And finally export voxel array to VTI
     p.exportVoxelArrayToVTI('Arthur9.vti')

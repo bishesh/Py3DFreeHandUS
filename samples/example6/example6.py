@@ -34,10 +34,6 @@ if __name__ == "__main__":
     #idxP1 = [510,512,515,518,521]
     P1 = singlePointFeaturesTo3DPointsMatrix(fea, u, v, idx=idxP1)
     P1g = dot3(T[idxP1,:,:], P1[...,None]).squeeze()[:,0:3]  # Np x 3
-#    P1g = np.zeros(P1.shape)
-#    for i in xrange(0, len(idxP1)):
-#        P1g[i,:] = np.dot(T[idxP1[i],:,:], P1[i,:])
-#    P1g = P1g[:,0:3]
     P1 = P1g.mean(axis=0)
     
     # Calculate global coordinates of tendon insertion
@@ -80,24 +76,24 @@ if __name__ == "__main__":
     # Calculate muscle length properties
     res2 = MTJlengths(P1, P2, P3)
     print res2
-#    
-#    
-#    
-#    # ---- METHOD 3: manual scale measures
-#    
-#    # Indicate manual scale measures
-#    Dtendon = ...
-#    Dmuscle = ...
-#    Dcomplex = ...
-#    
-#     # Calculate muscle length properties
-#    res3 = {}
-#    res3['Dtendon'] = Dtendon
-#    res3['Dmuscle'] = Dmuscle
-#    res3['Dcomplex'] = Dcomplex
-#    res3['DmusclePct'] = Dmuscle / (Dtendon + Dmuscle)
-#    res3['DtendonPct'] = Dtendon / (Dtendon + Dmuscle)
-#    print res3
+    
+    
+    
+    # ---- METHOD 3: manual scale measures
+    
+    # Indicate manual scale measures
+    Dtendon = 145.
+    Dmuscle = 252.
+    Dcomplex = 397.
+    
+     # Calculate muscle length properties
+    res3 = {}
+    res3['Dtendon'] = Dtendon
+    res3['Dmuscle'] = Dmuscle
+    res3['Dcomplex'] = Dcomplex
+    res3['DmusclePct'] = Dmuscle / (Dtendon + Dmuscle)
+    res3['DtendonPct'] = Dtendon / (Dtendon + Dmuscle)
+    print res3
     
     
     

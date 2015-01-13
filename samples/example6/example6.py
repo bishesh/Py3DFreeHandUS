@@ -31,14 +31,12 @@ if __name__ == "__main__":
     
     # Calculate global coordinates of muscle insertion
     idxP1 = [3,5,8,12,16]
-    #idxP1 = [510,512,515,518,521]
     P1 = singlePointFeaturesTo3DPointsMatrix(fea, u, v, idx=idxP1)
     P1g = dot3(T[idxP1,:,:], P1[...,None]).squeeze()[:,0:3]  # Np x 3
     P1 = P1g.mean(axis=0)
     
     # Calculate global coordinates of tendon insertion
     idxP2 = [510,512,515,518,521]
-    #idxP2 = [3,5,8,12,16]
     P2 = singlePointFeaturesTo3DPointsMatrix(fea, u, v, idx=idxP2)
     P2g = dot3(T[idxP2,:,:], P2[...,None]).squeeze()[:,0:3]  # Np x 3
     P2 = P2g.mean(axis=0)

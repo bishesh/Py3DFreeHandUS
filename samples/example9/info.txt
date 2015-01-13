@@ -1,0 +1,8 @@
+rigid body 1 :pointer
+rigid body 2 :probe
+rigid body 3 :foot
+rigid body 4 :shank
+
+LM only frames 244-251 rigid body 3 problem mk2,3
+
+PT from frame 120 until the end, no mk4 rigbody1

@@ -49,28 +49,18 @@ if __name__ == "__main__":
     def legPoseFun(mkrs, mkrList):
         
         # Define markers to use
-        MM = mkrs['Rigid_Body_2-Marker_1']
-        LM = mkrs['Rigid_Body_2-Marker_2']
-        HF = mkrs['Rigid_Body_2-Marker_3']
-        TT = HF
-        
-        # Create versors        
-        O = (LM + MM) / 2
-        X = getVersor(np.cross(HF - O, LM - MM))
-        Z = getVersor(np.cross(X, TT - O))
-        Y = getVersor(np.cross(Z, X))
-        
-        # Create rotation matrix from global reference frame to laboratory reference frame
-        R = np.array((X.T, Y.T, Z.T))   # 3 x 3 x N
-        R = np.transpose(R, (2,1,0))  # N x 3 x 3
-        
-        # Return data
-        return R, O
+        markers = {}
+        markers['MM'] = mkrs['Rigid_Body_2-Marker_1']
+        markers['LM'] = mkrs['Rigid_Body_2-Marker_2']
+        markers['HF'] = mkrs['Rigid_Body_2-Marker_3']
+        markers['TT'] = markers['HF'].copy()
+
+        return shankPoseISB(mkrs)
      
     # Coordinates of probe markers in rigid probe reference frame. These have 
     # to be computed from a kienamtic acquisition where markers are well visible
     markersLoc = {}
-    markersLoc['Rigid_Body_1-Marker_1'] = np.array([ -7.67213079,  78.5869874 ,   3.87184955])
+    markersLoc['Rigid_Body_1-Marker_1'] = np.array([ -7.67213079,  78.5869874,   3.87184955])
     markersLoc['Rigid_Body_1-Marker_2'] = np.array([  1.14228084e+02,   6.60250982e+01,  -1.70530257e-13])
     markersLoc['Rigid_Body_1-Marker_3'] = np.array([  1.13686838e-13,   1.13686838e-13,  -1.13686838e-13])
     markersLoc['Rigid_Body_1-Marker_4'] = np.array([  1.06743117e+02,   1.66977543e-13,  -1.42108547e-13])

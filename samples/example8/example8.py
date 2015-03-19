@@ -7,8 +7,10 @@ Created on Tue Dec 09 14:25:45 2014
 
 """
 
+import matplotlib.pyplot as plt
 from Py3DFreeHandUS import process
 from Py3DFreeHandUS.kine import *
+from Py3DFreeHandUS.segment import *
 import numpy as np
 
 if __name__ == "__main__":
@@ -47,19 +49,19 @@ if __name__ == "__main__":
     
     # Extract the phantom point in the US images
     q.extractFeatureFromUSImages(feature='1_point', segmentation='manual', showViewer=False, featuresFile='points_pointerUS4.fea')
+    
     # Calculate stylus tip
     markers = readC3D('pointer_US_4.c3d', ['markers'])['markers']
     stylusArgs = {}
-    #stylusArgs['dist'] = (np.array([147.5, 266., 369., 457.5]) - 3.5).tolist()
-    stylusArgs['dist'] = [147, 264, 369, 451]
+    stylusArgs['dist'] = [147.4, 263.4, 367.1, 449.4]
     stylusArgs['markers'] = ('Rigid_Body_1-Marker_1','Rigid_Body_1-Marker_2','Rigid_Body_1-Marker_3','Rigid_Body_1-Marker_4')
     stylus = Stylus(P=markers, fun=collinearNPointsStylusFun, args=stylusArgs)
     stylus.reconstructTip()
     stylusTip = stylus.getTipData()
     
-    # Resample tip data
+    # Resample tip data to US timeline
     usTimeVector = np.array(q.getAdjustedUSTimeVector()[0])
-    tipRes, ind = resampleMarker(stylusTip, x=usTimeVector, origFreq=120.)
+    tipRes, ind = resampleMarker(stylusTip, x=usTimeVector, origFreq=q.kineFreq)
 
     # Calculate calibration reconstruction accuray (RA)
     q.calculateProbeCalibrationAccuracy(acc='RA', P=tipRes[:ind.max(),:])
@@ -69,8 +71,40 @@ if __name__ == "__main__":
     print 'Reconstruction accuracy for different US probe attitudes: %s' % listRA
     print 'Mean reconstruction accuracy: %.2f mm' % RA
     
-    # Write pointer tip to C3D
+    # Create 3D virtual points for image corners and resample them to opto timeline
+    corners = q.getImageCornersAs3DPoints()
+    Nop = stylusTip.shape[0]
+    dt = 1. / q.kineFreq
+    xOpto = np.linspace(0, (Nop-1)*dt, num=Nop)
+    cornersRes, ind = resampleMarkers(corners, x=xOpto, origX=usTimeVector)
+    print 'US image corners 3D points created'
+    
+    # Create 3D virtual point for US points features
+    Nus = usTimeVector.shape[0]
+    usPoint = singlePointFeaturesTo3DPointsMatrix(q.features, sx, sy)
+    usFullPoint = np.zeros((Nus,3)) * np.nan
+    idx = sorted(q.features.keys())
+    R = q.getPoseForUSImages()
+    usFullPoint[idx,:] = dot3(R[idx,:,:], usPoint[:,:,None]).squeeze()[:,0:3]
+    usPointRes, ind = resampleMarker(usFullPoint, x=xOpto, origX=usTimeVector)
+    print 'US feature 3D point created'
+    
+    showMarkers = True
+    if showMarkers:
+        plt.plot(usTimeVector, usFullPoint,'bo')
+        plt.hold(True)
+        plt.plot(xOpto, usPointRes,'ro')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Coordinates for clicked points (mm)')
+    
+    # Write new virtual points to C3D
     data = {}
     data['markers'] = {}
-    data['markers']['data'] = {'Tip': stylusTip}
+    data['markers']['data'] = {'Tip': stylusTip, 'feature': usPointRes}
+    for m in corners:
+        data['markers']['data'][m] = cornersRes[m]
     writeC3D('pointer_US_4_Tip.c3d', data, copyFromFile='pointer_US_4.c3d')
+    print 'New C3D file created'
+    
+    plt.show()
+    

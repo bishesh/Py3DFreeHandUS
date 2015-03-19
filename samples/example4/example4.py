@@ -55,10 +55,10 @@ if __name__ == "__main__":
         markers['HF'] = mkrs['Rigid_Body_2-Marker_3']
         markers['TT'] = markers['HF'].copy()
 
-        return shankPoseISB(mkrs)
+        return shankPoseISB(markers)
      
     # Coordinates of probe markers in rigid probe reference frame. These have 
-    # to be computed from a kienamtic acquisition where markers are well visible
+    # to be computed from a kinematic acquisition where markers are well visible
     markersLoc = {}
     markersLoc['Rigid_Body_1-Marker_1'] = np.array([ -7.67213079,  78.5869874,   3.87184955])
     markersLoc['Rigid_Body_1-Marker_2'] = np.array([  1.14228084e+02,   6.60250982e+01,  -1.70530257e-13])
@@ -72,8 +72,8 @@ if __name__ == "__main__":
     USProbePoseFun = rigidProbeClusterFun
     
     # Declare which global reference function to use
-    #globPoseFun = None
-    globPoseFun = legPoseFun
+    globPoseFun = None
+    #globPoseFun = legPoseFun
         
     # Calculate pose US probe
     p.calculatePoseForUSProbe(mkrList=mkrList, USProbePoseFun=USProbePoseFun, USProbePoseFunArgs=args, globPoseFun=globPoseFun, showMarkers=False)
@@ -85,7 +85,8 @@ if __name__ == "__main__":
     p.setValidFramesForVoxelArray()
     
     # Calculate convenient pose for the voxel array
-    p.calculateConvPose('auto_PCA')
+    #p.calculateConvPose('auto_PCA')
+    p.calculateConvPose('first_last_frames_centroid')
     
     # Calculate scale factors
     fxyz = 'auto_bounded_parallel_scans'

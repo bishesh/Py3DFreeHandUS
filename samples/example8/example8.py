@@ -53,7 +53,7 @@ if __name__ == "__main__":
     # Calculate stylus tip
     markers = readC3D('pointer_US_4.c3d', ['markers'])['markers']
     stylusArgs = {}
-    stylusArgs['dist'] = [147.4, 263.4, 367.1, 449.4]
+    stylusArgs['dist'] = [149., 266.3, 370.3, 453.2]
     stylusArgs['markers'] = ('Rigid_Body_1-Marker_1','Rigid_Body_1-Marker_2','Rigid_Body_1-Marker_3','Rigid_Body_1-Marker_4')
     stylus = Stylus(P=markers, fun=collinearNPointsStylusFun, args=stylusArgs)
     stylus.reconstructTip()

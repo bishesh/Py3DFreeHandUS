@@ -1,0 +1,152 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Introduction &mdash; Py3DFreeHandUS 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="Py3DFreeHandUS 1.0 documentation" href="index.html" />
+    <link rel="next" title="Requirements" href="requires.html" />
+    <link rel="prev" title="Welcome to Py3DFreeHandUS’s documentation!" href="index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="requires.html" title="Requirements"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Welcome to Py3DFreeHandUS’s documentation!"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">Py3DFreeHandUS 1.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="introduction">
+<h1>Introduction<a class="headerlink" href="#introduction" title="Permalink to this headline">¶</a></h1>
+<p><strong>Py3DFreeHandUS</strong> is a package for processing data acquired <em>simultaneously</em> by ultra-sonographic systems (<strong>US</strong>) and marker-based optoelectronic systems.
+The <a class="reference external" href="http://en.wikipedia.org/wiki/Medical_ultrasonography">first ones</a> being medical devices used for visualizing subcutaneous body structures
+including tendons, muscles, joints, vessels and internal organs. The <a class="reference external" href="http://www2.brooklyn.liu.edu/bbut04/adamcenter/Instrumented%20Analysis%20Website/">second ones</a>
+being a based on a collection cameras able to reconstruct the 3D position in space of special tiny objects called <em>markers</em> (small grey balls in the image below).
+These systems are mostly famous for allowing the recording of human motion for special effects purpose in cinema.
+By combining these two measurement devices, it is possible to reconstruct the real 3D morphology of body structures such as muscles.</p>
+<p>The picture below shows the instrumental setup:</p>
+<a class="reference internal image-reference" href="_images/calf_acquisition.png"><img alt="_images/calf_acquisition.png" src="_images/calf_acquisition.png" style="width: 768.5px; height: 500.5px;" /></a>
+<p>This tool was developed by the University of Leuven (Belgium) through a collaboration between the following groups:</p>
+<ol class="arabic simple">
+<li><a class="reference external" href="http://www.uzleuven.be/en/laboratory-for-clinical-movementanalysis/research">CMAL-P</a> (Clinical Movement Analysis Laboratory, UZ Pellenberg)</li>
+<li><a class="reference external" href="http://www.mech.kuleuven.be/en/pma/">PMA</a> (Department of Production engineering, Machine design and Automation)</li>
+<li><a class="reference external" href="https://faber.kuleuven.be/english/">FaBeR</a> (Faculty of Kinesiology and Rehabilitation Sciences)</li>
+</ol>
+<p>and, at the moment, it is mainly used in the framework of this research project:</p>
+<p><strong>&#8220;3D ultrasound system for morphological measurements&#8221;</strong> (click <a class="reference external" href="https://gbiomed.kuleuven.be/english/research/50000743/nrrg1/pr.htm#3D%20ultrasound">here</a> for details).</p>
+<p>All the implemented algorithms are based on the following articles:</p>
+<table class="docutils citation" frame="void" id="ref1" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[Ref1]</td><td>Hsu PW, Prager RW, Gee AH, Treece GM. Freehand 3D Ultrasound Calibration: A Review, chapter 3, pages 47-84. Springer Berlin Heidelberg, Berlin, Heidelberg, 2009.</td></tr>
+</tbody>
+</table>
+<table class="docutils citation" frame="void" id="ref2" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[Ref2]</td><td>Prager RW, Rohling RN, Gee AH, Berman L. Rapid calibration for 3-D freehand ultrasound. Ultrasound Med Biol. 1998 Jul;24(6):855-69. PubMed PMID: 9740387.</td></tr>
+</tbody>
+</table>
+<table class="docutils citation" frame="void" id="ref3" rules="none">
+<colgroup><col class="label" /><col /></colgroup>
+<tbody valign="top">
+<tr><td class="label">[Ref3]</td><td>Wein W, Khamene A. Image-Based Method for In-Vivo Freehand Ultrasound Calibration. Medical Imaging 2008. Imaging and Signal Processing.</td></tr>
+</tbody>
+</table>
+<p>It is strongly recommended to read the referenced articles above before using the package.</p>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">Welcome to Py3DFreeHandUS&#8217;s documentation!</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="requires.html"
+                        title="next chapter">Requirements</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/intro.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="requires.html" title="Requirements"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Welcome to Py3DFreeHandUS’s documentation!"
+             >previous</a> |</li>
+        <li><a href="index.html">Py3DFreeHandUS 1.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2015, Davide Monari.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

@@ -1,3 +1,0 @@
-LIBRARY calib_c.pyd
-EXPORTS
-initcalib_c

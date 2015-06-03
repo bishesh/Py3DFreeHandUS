@@ -1,8 +1,0 @@
-Tutorial
-========
-
-.. toctree::
-   
-   tutorial/theory
-   tutorial/code_samples
-   tutorial/when_mem_error

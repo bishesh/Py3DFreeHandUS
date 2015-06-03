@@ -1,3 +1,0 @@
-LIBRARY image_utils_c.pyd
-EXPORTS
-initimage_utils_c

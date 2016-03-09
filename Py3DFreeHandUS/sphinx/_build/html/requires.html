@@ -1,0 +1,150 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Requirements &mdash; Py3DFreeHandUS 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="Py3DFreeHandUS 1.0 documentation" href="index.html" />
+    <link rel="next" title="Installation" href="install.html" />
+    <link rel="prev" title="Introduction" href="intro.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="install.html" title="Installation"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="intro.html" title="Introduction"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">Py3DFreeHandUS 1.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="requirements">
+<h1>Requirements<a class="headerlink" href="#requirements" title="Permalink to this headline">¶</a></h1>
+<p>We have used Python 2.7 for the implementation of Py3DFreeHandUS. It requires the following external packages:</p>
+<ul class="simple">
+<li>NumPy</li>
+<li>SciPy (0.11.0+)</li>
+<li>matplotlib</li>
+<li><a class="reference external" href="http://sympy.org/en/index.html">SymPy</a></li>
+<li><a class="reference external" href="https://code.google.com/p/pydicom/">pydicom</a></li>
+<li><a class="reference external" href="https://code.google.com/p/b-tk/">btk</a></li>
+<li>VTK</li>
+<li>OpenCV (2.4.9+)</li>
+<li>Cython + gcc (optional, but stringly suggested for reducing some computation bottlenecks)</li>
+<li><a class="reference external" href="http://zulko.github.io/moviepy/">MoviePy</a> (<strong>ffdshow</strong> codecs required)</li>
+<li>scikit-image</li>
+</ul>
+<p>All-in packages, such as <a class="reference external" href="https://store.continuum.io/cshop/anaconda/">Anaconda Python</a>, already include most of the external dependencies.</p>
+<p>In the very likely case the ultrasound files are large (GBytes), it is <strong>strongly</strong> suggested to use a 64-bit Python distribution.</p>
+<p>We carefully paid <em>much</em> attention about critical aspects such as vectorization, preallocation, RAM consumption,...
+to reach realistic computation time on commodity hardware, we still suggest to use a machine with <strong>1.6+ GHz and 4+ GB RAM</strong>.
+However, this mainly depends on the factors desribed in <a class="reference internal" href="tutorial/when_mem_error.html#when-mem-error"><em>In case of MemoryError</em></a>.</p>
+<p>The tool was tested with data recorded by the following systems:</p>
+<ul class="simple">
+<li>US: <a class="reference external" href="http://www.telemedultrasound.com/?lang=en">Telemed</a>, <a class="reference external" href="http://www.esaote.it/">ESAOTE</a></li>
+<li>Optoelectronic: <a class="reference external" href="http://www.naturalpoint.com/optitrack/">Optitrack</a>, <a class="reference external" href="http://vicon.com/">Vicon</a></li>
+</ul>
+<p>Theoretically, <em>any</em> US or optoelectronic device able to export DICOM and C3D files can be used.
+We suggest both devices to be <strong>hardware-synchronized</strong> for start and stop acquisition triggers. However, we provided time delay estimation and compensation techniques.</p>
+<p>The file formats tested are:</p>
+<ul class="simple">
+<li>US: <strong>uncompressed</strong> DICOM. Being uncompressed is a must, since at the moment <tt class="docutils literal"><span class="pre">pydicom</span></tt> doesn&#8217;t support compressed formats. We used <a class="reference external" href="http://www.mevislab.de/">MeVisLab</a> for this.</li>
+<li>Optoelectronic: C3D.</li>
+</ul>
+<p>Normally, US systems are also able to export images sequences in AVI format. When compressed, these files are much smaller than uncompressed DICOM (or AVI) files. But, depending on the US machine,
+compression can be <em>lossy</em>, not ideal for high-quality 3D morphology reconstruction. Plus, AVI files cannot contain mata-data like <em>Frame Time Vector</em>, necessary for re-synching optoelectronic
+data on US data (see method <tt class="docutils literal"><span class="pre">process.Process.setDataSourceProperties()</span></tt>)</p>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="intro.html"
+                        title="previous chapter">Introduction</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="install.html"
+                        title="next chapter">Installation</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/requires.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="install.html" title="Installation"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="intro.html" title="Introduction"
+             >previous</a> |</li>
+        <li><a href="index.html">Py3DFreeHandUS 1.0 documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2015, Davide Monari.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

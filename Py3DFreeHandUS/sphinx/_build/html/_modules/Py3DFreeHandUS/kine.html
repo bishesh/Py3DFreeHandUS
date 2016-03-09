@@ -1,0 +1,1477 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Py3DFreeHandUS.kine &mdash; Py3DFreeHandUS 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="../../_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="Py3DFreeHandUS 1.0 documentation" href="../../index.html" />
+    <link rel="up" title="Module code" href="../index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">Py3DFreeHandUS 1.0 documentation</a> &raquo;</li>
+          <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for Py3DFreeHandUS.kine</h1><div class="highlight"><pre>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">.. module:: kine</span>
+<span class="sd">   :synopsis: helper module for kinematics</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">btk</span>
+<span class="c">#from scipy.interpolate import interp1d</span>
+<span class="kn">from</span> <span class="nn">scipy.interpolate</span> <span class="kn">import</span> <span class="n">InterpolatedUnivariateSpline</span>
+
+<div class="viewcode-block" id="readC3D"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.readC3D">[docs]</a><span class="k">def</span> <span class="nf">readC3D</span><span class="p">(</span><span class="n">fileName</span><span class="p">,</span> <span class="n">sections</span><span class="p">,</span> <span class="n">opts</span><span class="o">=</span><span class="p">{}):</span>
+    <span class="sd">&quot;&quot;&quot;Read C3D file.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    fileName : str</span>
+<span class="sd">        Full path of the C3D file.</span>
+<span class="sd">        </span>
+<span class="sd">    sections : list</span>
+<span class="sd">        List of strings indicating which section to read.</span>
+<span class="sd">        It can contain the following: &#39;markers&#39;.</span>
+<span class="sd">        </span>
+<span class="sd">    opts : dict</span>
+<span class="sd">        Options dictionary that can contain the following keys:</span>
+<span class="sd">        </span>
+<span class="sd">        - setMarkersZeroValuesToNaN: if true, marker corrdinates exactly</span>
+<span class="sd">          matching 0 will be replace with NaNs (e.g. Optitrack systems).</span>
+<span class="sd">          Default is false.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Collection of read data. It contains, as keys, the items contained</span>
+<span class="sd">        in ``sections``:</span>
+<span class="sd">        </span>
+<span class="sd">        - markers: this is a dictionary where each key is a point label, and each</span>
+<span class="sd">          value is a N x 3 np.ndarray of 3D coordinates (in *mm*), where N is the </span>
+<span class="sd">          number of time frames.</span>
+<span class="sd">        </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="c"># Open C3D pointer</span>
+    <span class="n">reader</span> <span class="o">=</span> <span class="n">btk</span><span class="o">.</span><span class="n">btkAcquisitionFileReader</span><span class="p">()</span>
+    <span class="n">reader</span><span class="o">.</span><span class="n">SetFilename</span><span class="p">(</span><span class="n">fileName</span><span class="p">)</span>
+    <span class="n">reader</span><span class="o">.</span><span class="n">Update</span><span class="p">()</span> 
+    <span class="n">acq</span> <span class="o">=</span> <span class="n">reader</span><span class="o">.</span><span class="n">GetOutput</span><span class="p">()</span>
+    
+    <span class="c"># Initialize data structure</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="p">{}</span>
+    
+    <span class="c"># Read markers</span>
+    <span class="k">if</span> <span class="s">&#39;markers&#39;</span> <span class="ow">in</span> <span class="n">sections</span><span class="p">:</span>
+        
+        <span class="c"># Convert points unit to mm</span>
+        <span class="n">pointUnit</span> <span class="o">=</span> <span class="n">acq</span><span class="o">.</span><span class="n">GetPointUnit</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">pointUnit</span> <span class="o">==</span> <span class="s">&#39;mm&#39;</span><span class="p">:</span>
+            <span class="n">scaleFactor</span> <span class="o">=</span> <span class="mf">1.</span>
+        <span class="k">elif</span> <span class="n">pointUnit</span> <span class="o">==</span> <span class="s">&#39;m&#39;</span><span class="p">:</span>
+            <span class="n">scaleFactor</span> <span class="o">=</span> <span class="mf">1000.</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Point unit not recognized&#39;</span><span class="p">)</span>
+    
+        <span class="c"># Get relevant marker data (N x 3)</span>
+        <span class="n">markers</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">coll</span> <span class="o">=</span> <span class="n">acq</span><span class="o">.</span><span class="n">GetPoints</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">coll</span><span class="o">.</span><span class="n">GetItemNumber</span><span class="p">()):</span>
+            <span class="n">point</span> <span class="o">=</span> <span class="n">coll</span><span class="o">.</span><span class="n">GetItem</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+            <span class="n">label</span> <span class="o">=</span> <span class="n">point</span><span class="o">.</span><span class="n">GetLabel</span><span class="p">()</span>
+            <span class="n">marker</span> <span class="o">=</span> <span class="n">point</span><span class="o">.</span><span class="n">GetValues</span><span class="p">()</span> <span class="o">*</span> <span class="n">scaleFactor</span>
+            <span class="k">if</span> <span class="s">&#39;setMarkersZeroValuesToNaN&#39;</span> <span class="ow">in</span> <span class="n">opts</span> <span class="ow">and</span> <span class="n">opts</span><span class="p">[</span><span class="s">&#39;setMarkersZeroValuesToNaN&#39;</span><span class="p">]:</span>
+                <span class="n">marker</span><span class="p">[</span><span class="n">marker</span><span class="o">==</span><span class="mf">0.</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span> <span class="c"># replace 0. with np.nan</span>
+            <span class="n">markers</span><span class="p">[</span><span class="n">label</span><span class="p">]</span> <span class="o">=</span> <span class="n">marker</span>
+        
+        <span class="n">data</span><span class="p">[</span><span class="s">&#39;markers&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">markers</span>
+    
+    <span class="c"># Return data</span>
+    <span class="k">return</span> <span class="n">data</span>
+
+</div>
+<div class="viewcode-block" id="writeC3D"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.writeC3D">[docs]</a><span class="k">def</span> <span class="nf">writeC3D</span><span class="p">(</span><span class="n">fileName</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">copyFromFile</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Write to C3D file.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    fileName : str</span>
+<span class="sd">        Full path of the C3D file.</span>
+<span class="sd">        </span>
+<span class="sd">    data : dict</span>
+<span class="sd">        Data dictionary that can contain the following keys: </span>
+<span class="sd">        </span>
+<span class="sd">        - markers: this is marker-related data. This dictionary contains:</span>
+<span class="sd">            - data: dictionary where each key is a point label, and each</span>
+<span class="sd">              value is a N x 3 np.ndarray of 3D coordinates (in *mm*), where N is</span>
+<span class="sd">              the number of time frames. This field is always necessary.</span>
+<span class="sd">            - framesNumber: number of data points per marker.</span>
+<span class="sd">              This field is necessary when creating files from scratch.</span>
+<span class="sd">            - unit: string indicating the markers measurement unit. Available</span>
+<span class="sd">              strings are &#39;mm&#39; and &#39;m&#39;.</span>
+<span class="sd">              This field is necessary when creating files from scratch.</span>
+<span class="sd">            - freq: number indicating the markers acquisition frequency.</span>
+<span class="sd">              This field is necessary when creating files from scratch.</span>
+<span class="sd">    </span>
+<span class="sd">    copyFromFile : str</span>
+<span class="sd">        If None, it creates a new file from scratch.</span>
+<span class="sd">        If str indicating the path of an existing C3D file, it adds/owerwrite data copied from that file.</span>
+<span class="sd">        </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">if</span> <span class="n">copyFromFile</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="c"># Open C3D pointer</span>
+        <span class="n">reader</span> <span class="o">=</span> <span class="n">btk</span><span class="o">.</span><span class="n">btkAcquisitionFileReader</span><span class="p">()</span>
+        <span class="n">reader</span><span class="o">.</span><span class="n">SetFilename</span><span class="p">(</span><span class="n">copyFromFile</span><span class="p">)</span>
+        <span class="n">reader</span><span class="o">.</span><span class="n">Update</span><span class="p">()</span> 
+        <span class="n">acq</span> <span class="o">=</span> <span class="n">reader</span><span class="o">.</span><span class="n">GetOutput</span><span class="p">()</span>
+        <span class="k">if</span> <span class="s">&#39;markers&#39;</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+            <span class="n">nMarkerFrames</span> <span class="o">=</span> <span class="n">acq</span><span class="o">.</span><span class="n">GetPointFrameNumber</span><span class="p">()</span>
+            <span class="n">pointUnit</span> <span class="o">=</span> <span class="n">acq</span><span class="o">.</span><span class="n">GetPointUnit</span><span class="p">()</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c"># Create new acquisition</span>
+        <span class="n">acq</span> <span class="o">=</span> <span class="n">btk</span><span class="o">.</span><span class="n">btkAcquisition</span><span class="p">()</span>
+        <span class="k">if</span> <span class="s">&#39;markers&#39;</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+            <span class="n">nMarkerFrames</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s">&#39;markers&#39;</span><span class="p">][</span><span class="s">&#39;framesNumber&#39;</span><span class="p">]</span>
+            <span class="n">acq</span><span class="o">.</span><span class="n">Init</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">nMarkerFrames</span><span class="p">)</span>
+            <span class="n">pointUnit</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s">&#39;markers&#39;</span><span class="p">][</span><span class="s">&#39;unit&#39;</span><span class="p">]</span>
+            <span class="n">acq</span><span class="o">.</span><span class="n">SetPointUnit</span><span class="p">(</span><span class="n">pointUnit</span><span class="p">)</span>
+            <span class="n">pointFreq</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s">&#39;markers&#39;</span><span class="p">][</span><span class="s">&#39;freq&#39;</span><span class="p">]</span>
+            <span class="n">acq</span><span class="o">.</span><span class="n">SetPointFrequency</span><span class="p">(</span><span class="n">pointFreq</span><span class="p">)</span>
+    
+    <span class="k">if</span> <span class="s">&#39;markers&#39;</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+        <span class="c"># Write marker data</span>
+        <span class="n">markers</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s">&#39;markers&#39;</span><span class="p">][</span><span class="s">&#39;data&#39;</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">markers</span><span class="p">:</span>
+            <span class="n">newMarker</span> <span class="o">=</span> <span class="n">btk</span><span class="o">.</span><span class="n">btkPoint</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">nMarkerFrames</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">pointUnit</span> <span class="o">==</span> <span class="s">&#39;m&#39;</span><span class="p">:</span>    
+                <span class="n">markerData</span> <span class="o">=</span> <span class="n">markers</span><span class="p">[</span><span class="n">m</span><span class="p">]</span> <span class="o">/</span> <span class="mf">1000.</span>
+            <span class="k">elif</span> <span class="n">pointUnit</span> <span class="o">==</span> <span class="s">&#39;mm&#39;</span><span class="p">:</span>
+                <span class="n">markerData</span> <span class="o">=</span> <span class="n">markers</span><span class="p">[</span><span class="n">m</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+            <span class="n">newMarker</span><span class="o">.</span><span class="n">SetValues</span><span class="p">(</span><span class="n">markerData</span><span class="p">)</span>
+            <span class="n">acq</span><span class="o">.</span><span class="n">AppendPoint</span><span class="p">(</span><span class="n">newMarker</span><span class="p">)</span>
+        
+    <span class="c"># Write to C3D</span>
+    <span class="n">writer</span> <span class="o">=</span> <span class="n">btk</span><span class="o">.</span><span class="n">btkAcquisitionFileWriter</span><span class="p">()</span>
+    <span class="n">writer</span><span class="o">.</span><span class="n">SetInput</span><span class="p">(</span><span class="n">acq</span><span class="p">)</span>
+    <span class="n">writer</span><span class="o">.</span><span class="n">SetFilename</span><span class="p">(</span><span class="n">fileName</span><span class="p">)</span>
+    <span class="n">writer</span><span class="o">.</span><span class="n">Update</span><span class="p">()</span>
+    
+    </div>
+<div class="viewcode-block" id="markersClusterFun"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.markersClusterFun">[docs]</a><span class="k">def</span> <span class="nf">markersClusterFun</span><span class="p">(</span><span class="n">mkrs</span><span class="p">,</span> <span class="n">mkrList</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Default function for calculating a roto-translation matrix from a cluster</span>
+<span class="sd">    of markers to laboratory reference frame. It is based on the global position</span>
+<span class="sd">    for the markers only, and there is not assumption of rigid body. </span>
+<span class="sd">    The reference frame is defined as:</span>
+<span class="sd">        </span>
+<span class="sd">    - X versor from mkrList[-2] to mkrList[-1]</span>
+<span class="sd">    - Z cross-product between X and versor from mkrList[-2] to mkrList[-3]</span>
+<span class="sd">    - Y cross product between Z and X</span>
+<span class="sd">    - Origin: mkrList[-2]</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    mkrs : dict</span>
+<span class="sd">        Dictionary where each key is a maker name and each value </span>
+<span class="sd">        is a N x 3 np.ndarray of 3D coordinates, where N is the number of time frames.</span>
+<span class="sd">        </span>
+<span class="sd">    mkrList : list</span>
+<span class="sd">        List of marker names, whenever the names order is important.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    R : np.ndarray</span>
+<span class="sd">        N x 3 x 3 rotation matrix.</span>
+<span class="sd">    </span>
+<span class="sd">    T : np.ndarray</span>
+<span class="sd">        N x 3 translation vector.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="c"># Define markers to use</span>
+    <span class="c">#M1 = mkrs[mkrList[-4]]</span>
+    <span class="n">M2</span> <span class="o">=</span> <span class="n">mkrs</span><span class="p">[</span><span class="n">mkrList</span><span class="p">[</span><span class="o">-</span><span class="mi">3</span><span class="p">]]</span>
+    <span class="n">M3</span> <span class="o">=</span> <span class="n">mkrs</span><span class="p">[</span><span class="n">mkrList</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]]</span>
+    <span class="n">M4</span> <span class="o">=</span> <span class="n">mkrs</span><span class="p">[</span><span class="n">mkrList</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span>
+    
+    <span class="c"># Create versors</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">getVersor</span><span class="p">(</span><span class="n">M4</span> <span class="o">-</span> <span class="n">M3</span><span class="p">)</span>
+    <span class="n">Z</span> <span class="o">=</span> <span class="n">getVersor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">M2</span> <span class="o">-</span> <span class="n">M3</span><span class="p">))</span>
+    <span class="n">Y</span> <span class="o">=</span> <span class="n">getVersor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">Z</span><span class="p">,</span> <span class="n">X</span><span class="p">))</span>
+    
+    <span class="c"># Create rotation matrix from probe reference frame to laboratory reference frame</span>
+    <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">((</span><span class="n">X</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">Y</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">Z</span><span class="o">.</span><span class="n">T</span><span class="p">))</span>   <span class="c"># 3 x 3 x N</span>
+    <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">))</span>  <span class="c"># N x 3 x 3</span>
+    
+    <span class="c"># Create position vector</span>
+    <span class="n">T</span> <span class="o">=</span> <span class="n">M3</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        
+    <span class="c"># Return data</span>
+    <span class="k">return</span> <span class="n">R</span><span class="p">,</span> <span class="n">T</span>
+    
+    </div>
+<div class="viewcode-block" id="changeMarkersReferenceFrame"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.changeMarkersReferenceFrame">[docs]</a><span class="k">def</span> <span class="nf">changeMarkersReferenceFrame</span><span class="p">(</span><span class="n">mkrs</span><span class="p">,</span> <span class="n">Rfull</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Express markers in another reference frame.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    mkrs : dict</span>
+<span class="sd">        Dictionary where each key is a maker name and each value </span>
+<span class="sd">        is a N x 3 np.ndarray of 3D coordinates, where N is the number of time frames.</span>
+<span class="sd">    </span>
+<span class="sd">    Rfull : np.ndarray</span>
+<span class="sd">        N x 4 x 4 affine matrix from current refence frame</span>
+<span class="sd">        to new reference frame, for N frames.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Same structure as ``mkrs``, but with new coordinates.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="c"># Calculate marker coordinates in local reference frame</span>
+    <span class="n">mkrsNew</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">mkrList</span> <span class="o">=</span> <span class="n">mkrs</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">mkrList</span><span class="p">:</span>
+        <span class="n">M</span> <span class="o">=</span> <span class="n">mkrs</span><span class="p">[</span><span class="n">m</span><span class="p">][:]</span>  <span class="c"># copy</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">M</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">N</span> <span class="o">=</span> <span class="n">Rfull</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">M</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="p">(</span><span class="n">N</span><span class="p">,</span><span class="mi">1</span><span class="p">))</span>
+        <span class="n">M</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">hstack</span><span class="p">((</span><span class="n">M</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">M</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="mi">1</span><span class="p">))))[:,:,</span><span class="bp">None</span><span class="p">]</span>
+        <span class="n">mkrsNew</span><span class="p">[</span><span class="n">m</span><span class="p">]</span> <span class="o">=</span> <span class="n">dot3</span><span class="p">(</span><span class="n">Rfull</span><span class="p">,</span> <span class="n">M</span><span class="p">)[:,</span><span class="mi">0</span><span class="p">:</span><span class="mi">3</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">mkrsNew</span>
+    
+</div>
+<div class="viewcode-block" id="rigidBodySVDFun"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.rigidBodySVDFun">[docs]</a><span class="k">def</span> <span class="nf">rigidBodySVDFun</span><span class="p">(</span><span class="n">mkrs</span><span class="p">,</span> <span class="n">mkrList</span><span class="p">,</span> <span class="n">args</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Function for calculating the optimal roto-translation matrix from a rigid</span>
+<span class="sd">    cluster of markers to laboratory reference frame. The computation, by using</span>
+<span class="sd">    SVD, minimizes the RMSE between the markers inthe laboratory reference frame</span>
+<span class="sd">    and the position of the markers in the local reference frame.</span>
+<span class="sd">    See ``rigidBodyTransformation()`` for more details.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    mkrs : dict</span>
+<span class="sd">        Dictionary where each key is a marker name and each value </span>
+<span class="sd">        is a N x 3 np.ndarray of 3D coordinates, where N is the number of time frames.</span>
+<span class="sd">    </span>
+<span class="sd">    mkrList : list</span>
+<span class="sd">        List of marker names used in the SVD.</span>
+<span class="sd">        </span>
+<span class="sd">    args : mixed</span>
+<span class="sd">        Additional arguments:</span>
+<span class="sd">        - &#39;mkrsLoc&#39;: dictionary where keys are marker names and values are 3-elem</span>
+<span class="sd">        np.arrays indicating the coordinates in the local reference frame.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    R : np.ndarray</span>
+<span class="sd">        N x 3 x 3 rotation matrix.</span>
+<span class="sd">    </span>
+<span class="sd">    T : np.ndarray</span>
+<span class="sd">        N x 3 translation vector.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="c"># Extract coordinates of markers in rigid local reference frame</span>
+    <span class="n">mkrsLoc</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="s">&#39;mkrsLoc&#39;</span><span class="p">]</span>
+    
+    <span class="c"># Create Nmarkers x 3 matrix for local coordinates</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">mkrsLoc</span><span class="p">[</span><span class="n">m</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">mkrList</span><span class="p">])</span>
+    
+    <span class="c"># Loop for each time frame</span>
+    <span class="n">Nf</span> <span class="o">=</span> <span class="n">mkrs</span><span class="p">[</span><span class="n">mkrList</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">Nf</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="n">T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">Nf</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="n">Nf</span><span class="p">):</span>
+        
+        <span class="c"># Create Nmarkers x 3 matrix for global coordinates</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">mkrs</span><span class="p">[</span><span class="n">m</span><span class="p">][</span><span class="n">i</span><span class="p">,:]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">mkrList</span><span class="p">])</span>
+        
+        <span class="c"># Calculate number of visible markers</span>
+        <span class="n">idxNan</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">([</span><span class="n">y</span><span class="p">[:,</span><span class="mi">0</span><span class="p">]])[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">Nv</span> <span class="o">=</span> <span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">idxNan</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        
+        <span class="c"># Check minimum markers number</span>
+        <span class="k">if</span> <span class="n">Nv</span> <span class="o">&gt;=</span> <span class="mi">3</span><span class="p">:</span>
+            
+            <span class="c"># Calculate optimal roto-translation matrix </span>
+            <span class="n">Ri</span><span class="p">,</span> <span class="n">Ti</span><span class="p">,</span> <span class="n">ei</span> <span class="o">=</span> <span class="n">rigidBodyTransformation</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="o">~</span><span class="n">idxNan</span><span class="p">,:],</span> <span class="n">y</span><span class="p">[</span><span class="o">~</span><span class="n">idxNan</span><span class="p">,:])</span>
+            
+        <span class="k">else</span><span class="p">:</span>
+            
+            <span class="c"># Set data to nan</span>
+            <span class="n">Ri</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">))</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+            <span class="n">Ti</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">3</span><span class="p">,))</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+            <span class="n">ei</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],))</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+            <span class="k">print</span> <span class="s">&#39;Only </span><span class="si">%d</span><span class="s"> markers are visible for frame </span><span class="si">%d</span><span class="s">. Data will be set to nan&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">Nv</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
+        
+        <span class="c"># Calculate RSME</span>
+        <span class="n">RMSE</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">ei</span><span class="p">))</span>
+        <span class="n">iMax</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">ei</span><span class="p">)</span>
+        <span class="n">eMax</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">ei</span><span class="p">)</span>
+        
+        <span class="k">print</span> <span class="s">&#39;RMSE for rigid pose estimation for frame </span><span class="si">%d</span><span class="s">: </span><span class="si">%.5f</span><span class="s"> mm. Max distance for </span><span class="si">%s</span><span class="s">: </span><span class="si">%.5f</span><span class="s"> mm&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">RMSE</span><span class="p">,</span> <span class="n">mkrList</span><span class="p">[</span><span class="n">iMax</span><span class="p">],</span> <span class="n">eMax</span><span class="p">)</span>
+        
+        <span class="c"># Insert into roto-translation matrix</span>
+        <span class="n">R</span><span class="p">[</span><span class="n">i</span><span class="p">,:,:]</span> <span class="o">=</span> <span class="n">Ri</span>
+        <span class="n">T</span><span class="p">[</span><span class="n">i</span><span class="p">,:]</span> <span class="o">=</span> <span class="n">Ti</span>
+
+    <span class="c"># Return data        </span>
+    <span class="k">return</span> <span class="n">R</span><span class="p">,</span> <span class="n">T</span>
+    
+</div>
+<div class="viewcode-block" id="rigidBodyTransformation"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.rigidBodyTransformation">[docs]</a><span class="k">def</span> <span class="nf">rigidBodyTransformation</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Estimate or rigid rotation and translation between x and y in such a way</span>
+<span class="sd">    that y = Rx + t + e is optimal in a least square optimal. Details of the</span>
+<span class="sd">    algorithm can be found here:</span>
+<span class="sd">    </span>
+<span class="sd">    - Arun et al. (1987)</span>
+<span class="sd">    - Woltring (1992)</span>
+<span class="sd">    - Soderkvist &amp; Wedin (1993)</span>
+<span class="sd">    - Challis (1995)</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    x : np.ndarray</span>
+<span class="sd">        Nm x 3 array containing coordinates for Nm points in </span>
+<span class="sd">        the local rigid reference frame.</span>
+<span class="sd">        </span>
+<span class="sd">    y : np.ndarray</span>
+<span class="sd">        Nm x 3 array containing coordinates for Nm points in </span>
+<span class="sd">        the global reference frame. </span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    R : np.ndarray</span>
+<span class="sd">        3 x 3 estimated rotation matrix.</span>
+<span class="sd">    </span>
+<span class="sd">    t : np.ndarray</span>
+<span class="sd">        3-elem translation t.</span>
+<span class="sd">    </span>
+<span class="sd">    e : np.ndarray</span>
+<span class="sd">        Nm-elem estimated error e.</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c"># Get markers number</span>
+    <span class="n">Nmarkers</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> 
+
+    <span class="c"># Calculation of the cross-dispersion matrix C</span>
+    <span class="n">xmean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">ymean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">A</span> <span class="o">=</span> <span class="n">x</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">Nmarkers</span><span class="p">,</span><span class="mi">3</span><span class="p">)),</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">xmean</span><span class="p">))</span>
+    <span class="n">B</span> <span class="o">=</span> <span class="n">y</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">Nmarkers</span><span class="p">,</span><span class="mi">3</span><span class="p">)),</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">ymean</span><span class="p">))</span>
+    <span class="n">C</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">B</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span> <span class="o">/</span> <span class="n">Nmarkers</span>
+    
+    <span class="c"># Singular value decomposition of C</span>
+    <span class="n">U</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">V</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">svd</span><span class="p">(</span><span class="n">C</span><span class="p">)</span>
+    <span class="n">tol</span> <span class="o">=</span> <span class="mf">0.00002</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="n">S</span><span class="c">#np.diag(S)</span>
+    <span class="n">Srank</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">s</span> <span class="o">&gt;</span> <span class="n">tol</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">Srank</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Markers are probably colinear aligned&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">Srank</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="c"># All markers in one plane</span>
+        <span class="c"># Calculate cross product, i.e. normal vector</span>
+        <span class="n">U</span><span class="p">[:,</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">U</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">U</span><span class="p">[:,</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">V</span><span class="p">[:,</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">V</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">V</span><span class="p">[:,</span><span class="mi">1</span><span class="p">])</span>
+        
+    <span class="c"># Calculation of R, t and e</span>
+    <span class="n">D</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">V</span><span class="o">.</span><span class="n">T</span><span class="p">)))</span> <span class="c"># if D=-1 correction is needed:</span>
+    <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="n">D</span><span class="p">])),</span> <span class="n">V</span><span class="p">)</span>
+    <span class="n">t</span> <span class="o">=</span> <span class="p">(</span><span class="n">ymean</span><span class="o">.</span><span class="n">T</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="n">xmean</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">T</span> <span class="c"># vectors are internal in the [x y z] format</span>
+    <span class="c">#t=t&#39;; # patch to accomodate external format</span>
+    
+    <span class="c"># Calculate estimation error</span>
+    <span class="n">yestimated</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">R</span><span class="o">.</span><span class="n">T</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">Nmarkers</span><span class="p">,</span><span class="mi">3</span><span class="p">)),</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">t</span><span class="p">))</span> <span class="c"># vectors are internal in the [x y z] format</span>
+    <span class="n">dy</span> <span class="o">=</span> <span class="n">yestimated</span> <span class="o">-</span> <span class="n">y</span>
+    <span class="n">e</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dy</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span>
+    
+    <span class="k">return</span> <span class="n">R</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">e</span>
+    
+</div>
+<div class="viewcode-block" id="pca"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.pca">[docs]</a><span class="k">def</span> <span class="nf">pca</span><span class="p">(</span><span class="n">D</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Run Principal Component Analysis on data matrix. It performs SVD</span>
+<span class="sd">    decomposition on data covariance matrix.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    D : np.ndarray</span>
+<span class="sd">        Nv x No matrix, where Nv is the number of variables </span>
+<span class="sd">        and No the number of observations.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list</span>
+<span class="sd">        U, s as out of SVD (``see np.linalg.svd``)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">cov</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cov</span><span class="p">(</span><span class="n">D</span><span class="p">)</span>
+    <span class="n">U</span><span class="p">,</span> <span class="n">s</span><span class="p">,</span> <span class="n">V</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">svd</span><span class="p">(</span><span class="n">cov</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">U</span><span class="p">,</span> <span class="n">s</span>
+
+</div>
+<div class="viewcode-block" id="dot2"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.dot2">[docs]</a><span class="k">def</span> <span class="nf">dot2</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Compute K matrix products between a M x N array and a K x N x P</span>
+<span class="sd">    array in a vectorized way. </span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    a : np.ndarray</span>
+<span class="sd">        M x N array</span>
+<span class="sd">        </span>
+<span class="sd">    b : np.ndarrayK x N x P array</span>
+<span class="sd">        np.ndarray    </span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        K x M x P array</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">b</span><span class="p">,(</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">)),</span><span class="n">a</span><span class="o">.</span><span class="n">T</span><span class="p">),(</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">))</span>
+
+</div>
+<div class="viewcode-block" id="vdot2"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.vdot2">[docs]</a><span class="k">def</span> <span class="nf">vdot2</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Compute dot product in a vectorized way.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    a : np.ndarray</span>
+<span class="sd">        K x 3 array</span>
+<span class="sd">        </span>
+<span class="sd">    b : np.ndarray</span>
+<span class="sd">        K x 3 array</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        K-elems array</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">a</span> <span class="o">*</span> <span class="n">b</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">r</span>
+    
+</div>
+<div class="viewcode-block" id="dot3"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.dot3">[docs]</a><span class="k">def</span> <span class="nf">dot3</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Compute K matrix products between a K x M x N array and K x N x P</span>
+<span class="sd">    array in a vectorized way.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    a : np.ndarray</span>
+<span class="sd">        K x M x N array</span>
+<span class="sd">        </span>
+<span class="sd">    b : np.ndarray</span>
+<span class="sd">        K x N x P array</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        K x M x P array</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>    
+    
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s">&#39;kmn,knp-&gt;kmp&#39;</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span>
+
+       </div>
+<div class="viewcode-block" id="getVersor"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.getVersor">[docs]</a><span class="k">def</span> <span class="nf">getVersor</span><span class="p">(</span><span class="n">a</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Calculate versors of an array.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    a : np.ndarray</span>
+<span class="sd">        N x 3 array</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        N x 3 array of versors coordinates</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="c">#norm = np.sqrt(np.sum(np.multiply(np.mat(a),np.mat(a)),axis=1))</span>
+    <span class="n">norm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">a</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
+    <span class="n">r</span> <span class="o">=</span> <span class="n">a</span> <span class="o">/</span> <span class="p">(</span><span class="n">norm</span><span class="p">[:,</span><span class="bp">None</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">r</span>
+
+</div>
+<div class="viewcode-block" id="interpSignals"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.interpSignals">[docs]</a><span class="k">def</span> <span class="nf">interpSignals</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">xNew</span><span class="p">,</span> <span class="n">D</span><span class="p">,</span> <span class="n">kSpline</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Interpolate data array, with extrapolation. Data can contain NaNs.</span>
+<span class="sd">    The gaps will not be filled.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    D : np.ndarray</span>
+<span class="sd">        N x M data array to interpolate (interpolation is column-wise).</span>
+<span class="sd">        </span>
+<span class="sd">    x : np.ndarray</span>
+<span class="sd">        axis of the original data, with length N.</span>
+<span class="sd">        </span>
+<span class="sd">    xNew : np.ndarray</span>
+<span class="sd">        New axis for the interpolation, with length P.</span>
+<span class="sd">    </span>
+<span class="sd">    kSpline : mixed</span>
+<span class="sd">        See ``k`` in ``scipy.interpolate.InterpolatedUnivariateSpline()``.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        P x M interpolated array</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">xNew</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="n">D</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">D</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">D</span><span class="p">[:,</span><span class="n">i</span><span class="p">])</span>
+        <span class="n">fIdx</span> <span class="o">=</span> <span class="n">InterpolatedUnivariateSpline</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">idx</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="n">InterpolatedUnivariateSpline</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="n">D</span><span class="p">[</span><span class="n">idx</span><span class="p">,</span><span class="n">i</span><span class="p">],</span> <span class="n">k</span><span class="o">=</span><span class="n">kSpline</span><span class="p">)</span>
+        <span class="c">#idxNew = np.round(fIdx(xNew)).astype(np.bool)</span>
+        <span class="n">idxNew</span> <span class="o">=</span> <span class="n">fIdx</span><span class="p">(</span><span class="n">xNew</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mf">0.9</span>
+        <span class="n">R</span><span class="p">[</span><span class="n">idxNew</span><span class="p">,</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">f</span><span class="p">(</span><span class="n">xNew</span><span class="p">[</span><span class="n">idxNew</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">R</span>
+    
+</div>
+<div class="viewcode-block" id="resampleMarker"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.resampleMarker">[docs]</a><span class="k">def</span> <span class="nf">resampleMarker</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">origFreq</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">origX</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">step</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Resample marker data.</span>
+<span class="sd">    The function first tries to see if the new time scale ``x`` and ``origFreq`` </span>
+<span class="sd">    (to create the old scale) or ``origX`` are available. If not, the </span>
+<span class="sd">    resampling will take a frame each ``step`` frames.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    M : np.ndarray</span>
+<span class="sd">        N x 3 marker data array to resample</span>
+<span class="sd">        </span>
+<span class="sd">    x : np.ndarray</span>
+<span class="sd">        The new time scale (in *s*) on which to peform the resampling.</span>
+<span class="sd">        </span>
+<span class="sd">    origFreq : double</span>
+<span class="sd">        Frequency (in *Hz*) to recreate the old time scale.</span>
+<span class="sd">        </span>
+<span class="sd">    origX : np.ndarray</span>
+<span class="sd">        The old time scale (in *s*).</span>
+<span class="sd">        </span>
+<span class="sd">    step : int</span>
+<span class="sd">        Number of frames to skip when performing resampling not based on ``x``.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    Mout : np.ndarray</span>
+<span class="sd">        M x 3 resampled marker data </span>
+<span class="sd">    </span>
+<span class="sd">    ind : np.ndarray</span>
+<span class="sd">        Indices of ``x`` intersecting time vector of the original ``M``.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">x</span> <span class="o">&lt;&gt;</span> <span class="bp">None</span> <span class="ow">and</span> <span class="p">(</span><span class="n">origFreq</span> <span class="o">&lt;&gt;</span> <span class="bp">None</span> <span class="ow">or</span> <span class="n">origX</span> <span class="o">&lt;&gt;</span> <span class="bp">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">origFreq</span> <span class="o">&lt;&gt;</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">N</span> <span class="o">=</span> <span class="n">M</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">dt</span> <span class="o">=</span> <span class="mf">1.</span> <span class="o">/</span> <span class="n">origFreq</span>
+            <span class="n">x1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="n">N</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">*</span><span class="n">dt</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">N</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">x1</span> <span class="o">=</span> <span class="n">origX</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">x2</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+<span class="c">#        f = interp1d(x1, M, axis=0)</span>
+<span class="c">#        M2 = f(x2)</span>
+        <span class="n">M2</span> <span class="o">=</span> <span class="n">interpSignals</span><span class="p">(</span><span class="n">x1</span><span class="p">,</span> <span class="n">x2</span><span class="p">,</span> <span class="n">M</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">step</span> <span class="o">&lt;&gt;</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="n">N</span> <span class="o">=</span> <span class="n">M</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">x1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">N</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">num</span><span class="o">=</span><span class="n">N</span><span class="p">)</span>
+        <span class="n">x2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">N</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">step</span><span class="p">)</span>
+<span class="c">#        f = interp1d(x1, M, axis=0)</span>
+<span class="c">#        M2 = f(x2)</span>
+        <span class="n">M2</span> <span class="o">=</span> <span class="n">interpSignals</span><span class="p">(</span><span class="n">x1</span><span class="p">,</span> <span class="n">x2</span><span class="p">,</span> <span class="n">M</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Impossible to resample&#39;</span><span class="p">)</span>
+    <span class="n">ind</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nonzero</span><span class="p">((</span><span class="n">x2</span> <span class="o">&gt;=</span> <span class="n">x1</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">x2</span> <span class="o">&lt;=</span> <span class="n">x1</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]))[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">M2</span><span class="p">,</span> <span class="n">ind</span>
+    
+    
+    </div>
+<div class="viewcode-block" id="resampleMarkers"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.resampleMarkers">[docs]</a><span class="k">def</span> <span class="nf">resampleMarkers</span><span class="p">(</span><span class="n">M</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Resample markers data.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    M : dict</span>
+<span class="sd">        Dictionary where keys are markers names and values are np.ndarray </span>
+<span class="sd">        N x 3 marker data array to resample.</span>
+<span class="sd">        </span>
+<span class="sd">    **kwargs</span>
+<span class="sd">        See ``resampleMarker()``.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    resM : dict</span>
+<span class="sd">        Resampled marker data </span>
+<span class="sd">    </span>
+<span class="sd">    ind : np.ndarray</span>
+<span class="sd">        See ``resampleMarker()``.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">resM</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">M</span><span class="p">:</span>
+        <span class="n">resM</span><span class="p">[</span><span class="n">m</span><span class="p">],</span> <span class="n">ind</span> <span class="o">=</span> <span class="n">resampleMarker</span><span class="p">(</span><span class="n">M</span><span class="p">[</span><span class="n">m</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">resM</span><span class="p">,</span> <span class="n">ind</span>
+
+
+</div>
+<div class="viewcode-block" id="composeRotoTranslMatrix"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.composeRotoTranslMatrix">[docs]</a><span class="k">def</span> <span class="nf">composeRotoTranslMatrix</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="n">T</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Create affine roto-translation matrix from rotation matrix and translation vector.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    R : np.ndarray</span>
+<span class="sd">        N x 3 x 3 rotation matrix, for N frames.</span>
+<span class="sd">        </span>
+<span class="sd">    T : np.ndarray</span>
+<span class="sd">        N x 3 translation vector, for N frames.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        N x 4 x 4 affine matrix.</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">Nf</span> <span class="o">=</span> <span class="n">R</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">Rfull</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">R</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">T</span><span class="p">,(</span><span class="n">Nf</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">1</span><span class="p">))),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">)),</span> <span class="p">(</span><span class="n">Nf</span><span class="p">,</span><span class="mi">1</span><span class="p">))</span>
+    <span class="n">Rfull</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">Rfull</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">b</span><span class="p">,(</span><span class="n">Nf</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">4</span><span class="p">))),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Rfull</span>
+    
+</div>
+<div class="viewcode-block" id="decomposeRotoTranslMatrix"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.decomposeRotoTranslMatrix">[docs]</a><span class="k">def</span> <span class="nf">decomposeRotoTranslMatrix</span><span class="p">(</span><span class="n">Rfull</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Extract rotation matrix and translation vector from affine roto-translation matrix.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    Rfull : np.ndarray</span>
+<span class="sd">        N x 4 x 4 affine matrix, for N frames.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    R : np.ndarray</span>
+<span class="sd">        N x 3 x 3 rotation matrix and second </span>
+<span class="sd">    </span>
+<span class="sd">    T : np.ndarray</span>
+<span class="sd">        N x 3 translation vector, for N frames.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="n">R</span> <span class="o">=</span> <span class="n">Rfull</span><span class="p">[:,</span><span class="mi">0</span><span class="p">:</span><span class="mi">3</span><span class="p">,</span><span class="mi">0</span><span class="p">:</span><span class="mi">3</span><span class="p">]</span>
+    <span class="n">T</span> <span class="o">=</span> <span class="n">Rfull</span><span class="p">[:,</span><span class="mi">0</span><span class="p">:</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">R</span><span class="p">,</span> <span class="n">T</span>
+
+</div>
+<div class="viewcode-block" id="inv2"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.inv2">[docs]</a><span class="k">def</span> <span class="nf">inv2</span><span class="p">(</span><span class="n">R</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Behaves like np.linalg.inv for multiple matrices, but does not raise</span>
+<span class="sd">    exceptions if a matrix contains nans and it is not invertible.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    R : np.ndarray</span>
+<span class="sd">        N x M x M series of matrices to invert.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        N x M x M array.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="n">Rinv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">R</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span>
+    <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">R</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">np</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">R</span><span class="p">))[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">Rinv</span><span class="p">[</span><span class="n">idx</span><span class="p">,:,:]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">R</span><span class="p">[</span><span class="n">idx</span><span class="p">,:,:])</span>
+    <span class="k">return</span> <span class="n">Rinv</span>
+    
+    </div>
+<div class="viewcode-block" id="createClusterTemplate"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.createClusterTemplate">[docs]</a><span class="k">def</span> <span class="nf">createClusterTemplate</span><span class="p">(</span><span class="n">markers</span><span class="p">,</span> <span class="n">mkrList</span><span class="p">,</span> <span class="n">timeWin</span><span class="o">=</span><span class="s">&#39;all_no_nan&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Create cluster template data from existing markers data.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    markers : dict</span>
+<span class="sd">        Dictionary of point 3D coordinates. Keys are points names</span>
+<span class="sd">        values are np.ndarray N x 3 representing 3D coordinates in the global </span>
+<span class="sd">        reference frame, where N is the number of time frames.</span>
+<span class="sd">        </span>
+<span class="sd">    mkrList : list</span>
+<span class="sd">        List of marker names to be used for the template.</span>
+<span class="sd">        </span>
+<span class="sd">    timeWin : mixed</span>
+<span class="sd">        Represents which time frames to select for template creation.</span>
+<span class="sd">        If str, it can be:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;all_no_nan&#39;: all time frames apart from those where marker data is nan.</span>
+<span class="sd">          If list, it must contain two values containing first and last frame for the </span>
+<span class="sd">          time window to search into. Only non-nans will be used.</span>
+<span class="sd">          If single value, it indicates the frame to use.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Dictionary where keys are marker names and values are 3-elem</span>
+<span class="sd">        np.arrays indicating the coordinates in the cluster reference frame.</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="c"># Calculate roto-translation-matrix from local to laboratory reference frame</span>
+    <span class="n">R</span><span class="p">,</span> <span class="n">T</span> <span class="o">=</span> <span class="n">markersClusterFun</span><span class="p">(</span><span class="n">markers</span><span class="p">,</span> <span class="n">mkrList</span><span class="p">)</span>
+    
+    <span class="c"># Invert roto-translation matrix</span>
+    <span class="n">Rfull</span> <span class="o">=</span> <span class="n">composeRotoTranslMatrix</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="n">T</span><span class="p">)</span>
+    <span class="n">Rfull</span> <span class="o">=</span> <span class="n">inv2</span><span class="p">(</span><span class="n">Rfull</span><span class="p">)</span>
+    
+    <span class="c"># Express markers in the local rigid probe reference frame</span>
+    <span class="n">markersLoc</span> <span class="o">=</span> <span class="n">changeMarkersReferenceFrame</span><span class="p">(</span><span class="n">markers</span><span class="p">,</span> <span class="n">Rfull</span><span class="p">)</span>
+    
+    <span class="c"># Calculate reference frame with SVD</span>
+    <span class="k">if</span> <span class="n">timeWin</span> <span class="o">==</span> <span class="s">&#39;all_no_nan&#39;</span><span class="p">:</span>
+        <span class="n">markersLoc</span> <span class="o">=</span> <span class="p">{</span><span class="n">m</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">nanmean</span><span class="p">(</span><span class="n">markersLoc</span><span class="p">[</span><span class="n">m</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">mkrList</span><span class="p">}</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">timeWin</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span><span class="nb">tuple</span><span class="p">)):</span>
+        <span class="n">i1</span> <span class="o">=</span> <span class="n">timeWin</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">i2</span> <span class="o">=</span> <span class="n">timeWin</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">markersLoc</span> <span class="o">=</span> <span class="p">{</span><span class="n">m</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">nanmean</span><span class="p">(</span><span class="n">markersLoc</span><span class="p">[</span><span class="n">m</span><span class="p">][</span><span class="n">i1</span><span class="p">:</span><span class="n">i2</span><span class="p">,:],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">mkrList</span><span class="p">}</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">timeWin</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span><span class="nb">float</span><span class="p">)):</span>
+        <span class="n">markersLoc</span> <span class="o">=</span> <span class="p">{</span><span class="n">m</span><span class="p">:</span> <span class="n">markersLoc</span><span class="p">[</span><span class="n">m</span><span class="p">][</span><span class="n">timeWin</span><span class="p">,:]</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">mkrList</span><span class="p">}</span>
+        
+    <span class="k">return</span> <span class="n">markersLoc</span>
+    
+    </div>
+<div class="viewcode-block" id="collinearNPointsStylusFun"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.collinearNPointsStylusFun">[docs]</a><span class="k">def</span> <span class="nf">collinearNPointsStylusFun</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">args</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Tip reconstruction function for M collinear points.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    P : dict</span>
+<span class="sd">        Dictionary of point 3D coordinates. Keys are points names</span>
+<span class="sd">        values are np.ndarray N x 3 representing 3D coordinates (in *mm*)</span>
+<span class="sd">        in the global reference frame, where N is the number of time frames.</span>
+<span class="sd">        </span>
+<span class="sd">    args : dict</span>
+<span class="sd">        Dictionary with the floowing keys:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;markers&#39;: list of marker names to be used.</span>
+<span class="sd">        - &#39;dist&#39;: dictionary of distances between points and tip. Keys must be</span>
+<span class="sd">          present in the &#39;markers&#39; list, values are distances (in *mm*).</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        N x 3 array representing 3D coordinates of the reconstructed tip</span>
+<span class="sd">        (in *mm*).</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c"># Get distances from stylus tip to each marker</span>
+    <span class="n">dist</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="s">&#39;dist&#39;</span><span class="p">]</span>
+    
+    <span class="c"># Get markers</span>
+    <span class="n">markers</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="s">&#39;markers&#39;</span><span class="p">]</span>
+    
+    <span class="c"># Difference between extreme markers</span>
+    <span class="n">existingMarkerIdxs</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">markers</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="n">markers</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="ow">in</span> <span class="n">P</span><span class="p">:</span>
+            <span class="n">existingMarkerIdxs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+            
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">existingMarkerIdxs</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;At least 2 collinear pointer markers must be visible&#39;</span><span class="p">)</span>
+        
+    <span class="n">m1</span> <span class="o">=</span> <span class="n">existingMarkerIdxs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">m2</span> <span class="o">=</span> <span class="n">existingMarkerIdxs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">E</span> <span class="o">=</span> <span class="n">P</span><span class="p">[</span><span class="n">markers</span><span class="p">[</span><span class="n">m1</span><span class="p">]]</span> <span class="o">-</span> <span class="n">P</span><span class="p">[</span><span class="n">markers</span><span class="p">[</span><span class="n">m2</span><span class="p">]]</span>
+    <span class="n">Nf</span> <span class="o">=</span> <span class="n">P</span><span class="p">[</span><span class="n">markers</span><span class="p">[</span><span class="n">m1</span><span class="p">]]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    
+    <span class="c"># Normalize distance</span>
+    <span class="n">N</span> <span class="o">=</span> <span class="n">E</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">E</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)[:,</span><span class="bp">None</span><span class="p">]</span>
+    
+    <span class="c"># Calculate N tips, with each distance</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">Nf</span><span class="p">,</span><span class="mi">0</span><span class="p">))</span>
+    <span class="n">Y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">Nf</span><span class="p">,</span><span class="mi">0</span><span class="p">))</span>
+    <span class="n">Z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">Nf</span><span class="p">,</span><span class="mi">0</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">markers</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="n">i</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">existingMarkerIdxs</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">tip</span> <span class="o">=</span> <span class="n">P</span><span class="p">[</span><span class="n">markers</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="o">+</span> <span class="n">dist</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">*</span> <span class="n">N</span>
+        <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">hstack</span><span class="p">((</span><span class="n">X</span><span class="p">,</span> <span class="n">tip</span><span class="p">[:,</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">]))</span>
+        <span class="n">Y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">hstack</span><span class="p">((</span><span class="n">Y</span><span class="p">,</span> <span class="n">tip</span><span class="p">[:,</span><span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">]))</span>
+        <span class="n">Z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">hstack</span><span class="p">((</span><span class="n">Z</span><span class="p">,</span> <span class="n">tip</span><span class="p">[:,</span><span class="mi">2</span><span class="p">:</span><span class="mi">3</span><span class="p">]))</span>
+    
+    <span class="c"># Average the tips</span>
+    <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nanmean</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)[:,</span><span class="bp">None</span><span class="p">]</span>
+    <span class="n">Y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nanmean</span><span class="p">(</span><span class="n">Y</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)[:,</span><span class="bp">None</span><span class="p">]</span>
+    <span class="n">Z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nanmean</span><span class="p">(</span><span class="n">Z</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)[:,</span><span class="bp">None</span><span class="p">]</span>
+    <span class="n">tip</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">hstack</span><span class="p">((</span><span class="n">X</span><span class="p">,</span><span class="n">Y</span><span class="p">,</span><span class="n">Z</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">tip</span>
+    
+
+</div>
+<div class="viewcode-block" id="Stylus"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.Stylus">[docs]</a><span class="k">class</span> <span class="nc">Stylus</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Helper class for reconstructing stylus tip using source points rigidly connected to stylus.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">P</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">fun</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Constructor</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">P</span> <span class="o">=</span> <span class="n">P</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tipFun</span> <span class="o">=</span> <span class="n">fun</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tipFunArgs</span> <span class="o">=</span> <span class="n">args</span>
+        
+        
+<div class="viewcode-block" id="Stylus.setPointsData"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.Stylus.setPointsData">[docs]</a>    <span class="k">def</span> <span class="nf">setPointsData</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">P</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Set source points 3D coordinates.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        P : dict</span>
+<span class="sd">            Dictionary of point 3D coordinates. Keys are points names,</span>
+<span class="sd">            values are np.ndarray N x 3, where N is the number of time frames.</span>
+<span class="sd">            </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">P</span> <span class="o">=</span> <span class="n">P</span>
+        
+    </div>
+<div class="viewcode-block" id="Stylus.setTipReconstructionFunction"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.Stylus.setTipReconstructionFunction">[docs]</a>    <span class="k">def</span> <span class="nf">setTipReconstructionFunction</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fun</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Set the function for tip reconstruction from source points.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        fun : fun</span>
+<span class="sd">            Function taking as input arguments ``P`` and, if not None, ``args``. </span>
+<span class="sd">            It must return a N x 3 np.ndarray representing 3D coordinates of </span>
+<span class="sd">            the reconstructed tip.</span>
+<span class="sd">    </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tipFun</span> <span class="o">=</span> <span class="n">fun</span>
+        
+    </div>
+<div class="viewcode-block" id="Stylus.setTipReconstructionFunctionArgs"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.Stylus.setTipReconstructionFunctionArgs">[docs]</a>    <span class="k">def</span> <span class="nf">setTipReconstructionFunctionArgs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Set additional arguments for tip reconstruction function.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        args : mixed</span>
+<span class="sd">            Argument passed to ``fun``.</span>
+<span class="sd">            </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tipFunArgs</span> <span class="o">=</span> <span class="n">args</span>
+        
+    </div>
+<div class="viewcode-block" id="Stylus.reconstructTip"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.Stylus.reconstructTip">[docs]</a>    <span class="k">def</span> <span class="nf">reconstructTip</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Perform tip reconstruction.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">tipFunArgs</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tip</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tipFun</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">P</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tip</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tipFun</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">P</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tipFunArgs</span><span class="p">)</span>
+            
+    </div>
+<div class="viewcode-block" id="Stylus.getTipData"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.Stylus.getTipData">[docs]</a>    <span class="k">def</span> <span class="nf">getTipData</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get tipa data.</span>
+<span class="sd">        </span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            N x 3 array representing 3D coordinates of the reconstructed tip.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">tip</span>
+        
+
+</div></div>
+<div class="viewcode-block" id="calculateStylusTipInCluster"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.calculateStylusTipInCluster">[docs]</a><span class="k">def</span> <span class="nf">calculateStylusTipInCluster</span><span class="p">(</span><span class="n">stylus</span><span class="p">,</span> <span class="n">markers</span><span class="p">,</span> <span class="n">clusterMkrList</span><span class="p">,</span> <span class="n">clusterArgs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Helper function for:</span>
+<span class="sd">    - markers cluster pose estimation (by SVD)</span>
+<span class="sd">    - reconstruction of the stylus tip in the cluster reference frame.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    markers : dict</span>
+<span class="sd">        See ``mkrs`` in ``rigidBodySVDFun()``.</span>
+<span class="sd">    </span>
+<span class="sd">    clusterMkrList : list</span>
+<span class="sd">        See ``mkrList`` in ``rigidBodySVDFun()``.</span>
+<span class="sd">        </span>
+<span class="sd">    clusterArgs : mixed</span>
+<span class="sd">        See ``args`` in ``rigidBodySVDFun()``.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        N x 3 array representing 3D coordinates of the reconstructed tip</span>
+<span class="sd">        (in *mm*) in the cluster reference frame, where N is the number of</span>
+<span class="sd">        time frames.</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="c"># Calculate reference frame</span>
+    <span class="n">R</span><span class="p">,</span> <span class="n">T</span> <span class="o">=</span> <span class="n">rigidBodySVDFun</span><span class="p">(</span><span class="n">markers</span><span class="p">,</span> <span class="n">clusterMkrList</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="n">clusterArgs</span><span class="p">)</span>
+    
+    <span class="c"># Invert roto-translation matrix</span>
+    <span class="n">gRl</span> <span class="o">=</span> <span class="n">composeRotoTranslMatrix</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="n">T</span><span class="p">)</span>
+    <span class="n">lRg</span> <span class="o">=</span> <span class="n">inv2</span><span class="p">(</span><span class="n">gRl</span><span class="p">)</span>
+    
+    <span class="c"># Reconstruct stylus tip</span>
+    <span class="n">stylus</span><span class="o">.</span><span class="n">setPointsData</span><span class="p">(</span><span class="n">markers</span><span class="p">)</span>
+    <span class="n">stylus</span><span class="o">.</span><span class="n">reconstructTip</span><span class="p">()</span>
+    <span class="n">tip</span> <span class="o">=</span> <span class="n">stylus</span><span class="o">.</span><span class="n">getTipData</span><span class="p">()</span>
+    
+    <span class="c"># Average on the time frames</span>
+    <span class="n">tip</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nanmean</span><span class="p">(</span><span class="n">tip</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    
+    <span class="c"># Add tip to available markers</span>
+    <span class="n">markers</span><span class="p">[</span><span class="s">&#39;Tip&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">tip</span>
+    
+    <span class="c"># Express tip in the local rigid cluster reference frame</span>
+    <span class="n">tipLoc</span> <span class="o">=</span> <span class="n">changeMarkersReferenceFrame</span><span class="p">(</span><span class="n">markers</span><span class="p">,</span> <span class="n">lRg</span><span class="p">)[</span><span class="s">&#39;Tip&#39;</span><span class="p">]</span>
+    
+    <span class="k">return</span> <span class="n">tipLoc</span>
+    
+
+</div>
+<div class="viewcode-block" id="shankPoseISB"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.shankPoseISB">[docs]</a><span class="k">def</span> <span class="nf">shankPoseISB</span><span class="p">(</span><span class="n">mkrs</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="s">&#39;R&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Calculate roto-translation matrix from shank (ISB conventions) to </span>
+<span class="sd">    laboratory reference frame.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    mkrs : dict</span>
+<span class="sd">        Markers data. Keys are marker names, values are np.ndarray N x 3, </span>
+<span class="sd">        where N is the number of time frames. Used names are:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;MM&#39;: medial malleolus</span>
+<span class="sd">        - &#39;LM&#39;: lateral melleolus</span>
+<span class="sd">        - &#39;HF&#39;: head of fibula</span>
+<span class="sd">        - &#39;TT&#39;: tibial tuberosity</span>
+<span class="sd">        </span>
+<span class="sd">    s : {&#39;R&#39;, &#39;L&#39;}</span>
+<span class="sd">        Anatomical side.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    R : np.ndarray</span>
+<span class="sd">        N x 3 x 3 rotation matrix.</span>
+<span class="sd">    </span>
+<span class="sd">    T : np.ndarray</span>
+<span class="sd">        N x 3 translation vector.</span>
+<span class="sd">        </span>
+<span class="sd">    References</span>
+<span class="sd">    ----------</span>
+<span class="sd">    Leardini A, Benedetti MG, Berti L, Bettinelli D, Nativo R, Giannini S.</span>
+<span class="sd">    Rear-foot, mid-foot and fore-foot motion during the stance phase of gait. </span>
+<span class="sd">    Gait Posture. 2007 Mar;25(3):453-62. Epub 2006 Sep 11. PubMed PMID: 16965916.</span>
+<span class="sd">        </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="c"># Define markers to use</span>
+    <span class="n">MM</span> <span class="o">=</span> <span class="n">mkrs</span><span class="p">[</span><span class="s">&#39;MM&#39;</span><span class="p">]</span>
+    <span class="n">LM</span> <span class="o">=</span> <span class="n">mkrs</span><span class="p">[</span><span class="s">&#39;LM&#39;</span><span class="p">]</span>
+    <span class="n">HF</span> <span class="o">=</span> <span class="n">mkrs</span><span class="p">[</span><span class="s">&#39;HF&#39;</span><span class="p">]</span>
+    <span class="n">TT</span> <span class="o">=</span> <span class="n">mkrs</span><span class="p">[</span><span class="s">&#39;TT&#39;</span><span class="p">]</span>
+    
+    <span class="c"># Create versors  </span>
+    <span class="n">IM</span> <span class="o">=</span> <span class="p">(</span><span class="n">LM</span> <span class="o">+</span> <span class="n">MM</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>      
+    <span class="n">Osha</span> <span class="o">=</span> <span class="n">IM</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">s</span> <span class="o">==</span> <span class="s">&#39;R&#39;</span><span class="p">:</span>
+        <span class="n">XshaTemp</span> <span class="o">=</span> <span class="n">getVersor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">Osha</span> <span class="o">-</span> <span class="n">LM</span><span class="p">,</span> <span class="n">HF</span> <span class="o">-</span> <span class="n">LM</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">XshaTemp</span> <span class="o">=</span> <span class="o">-</span><span class="n">getVersor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">Osha</span> <span class="o">-</span> <span class="n">LM</span><span class="p">,</span> <span class="n">HF</span> <span class="o">-</span> <span class="n">LM</span><span class="p">))</span>
+<span class="c">#    Ysha = getVersor((TT - Osha) - np.multiply(XshaTemp,vdot2(TT - Osha, XshaTemp)))</span>
+    <span class="n">Ysha</span> <span class="o">=</span> <span class="n">getVersor</span><span class="p">((</span><span class="n">TT</span> <span class="o">-</span> <span class="n">Osha</span><span class="p">)</span> <span class="o">-</span> <span class="n">XshaTemp</span> <span class="o">*</span> <span class="n">vdot2</span><span class="p">(</span><span class="n">TT</span> <span class="o">-</span> <span class="n">Osha</span><span class="p">,</span> <span class="n">XshaTemp</span><span class="p">)[:,</span><span class="bp">None</span><span class="p">])</span>
+    <span class="n">Zsha</span> <span class="o">=</span> <span class="n">getVersor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">XshaTemp</span><span class="p">,</span> <span class="n">Ysha</span><span class="p">))</span>
+    <span class="n">Xsha</span> <span class="o">=</span> <span class="n">getVersor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">Ysha</span><span class="p">,</span> <span class="n">Zsha</span><span class="p">))</span>
+    
+    <span class="c"># Create rotation matrix from shank reference frame to laboratory reference frame</span>
+    <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">((</span><span class="n">Xsha</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">Ysha</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">Zsha</span><span class="o">.</span><span class="n">T</span><span class="p">))</span>   <span class="c"># 3 x 3 x N</span>
+    <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">))</span>  <span class="c"># N x 3 x 3</span>
+    
+    <span class="c"># Return data</span>
+    <span class="k">return</span> <span class="n">R</span><span class="p">,</span> <span class="n">Osha</span>
+    
+    </div>
+<div class="viewcode-block" id="shankPoseISBWithClusterSVD"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.shankPoseISBWithClusterSVD">[docs]</a><span class="k">def</span> <span class="nf">shankPoseISBWithClusterSVD</span><span class="p">(</span><span class="n">mkrs</span><span class="p">,</span> <span class="n">clusterMkrList</span><span class="p">,</span> <span class="n">args</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Calculate roto-translation matrix from shank (ISB conventions) to </span>
+<span class="sd">    laboratory reference frame, using rigid segment-connected cluster of</span>
+<span class="sd">    technical markers.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters </span>
+<span class="sd">    ----------</span>
+<span class="sd">    mkrs : dict</span>
+<span class="sd">        Technical markers data. Keys are marker names, values are np.ndarray </span>
+<span class="sd">        N x 3, where N is the number of time frames.</span>
+<span class="sd">        </span>
+<span class="sd">    clusterMkrList : list</span>
+<span class="sd">        List of technical marker names to use.</span>
+<span class="sd">    </span>
+<span class="sd">    args : mixed</span>
+<span class="sd">        Additional arguments:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;mkrsLoc&#39;: dictionary where keys are marker names and values are </span>
+<span class="sd">          3-elem np.arrays indicating the coordinates in the local reference</span>
+<span class="sd">          frame. Both technical and anatomical markers are needed here. For</span>
+<span class="sd">          For anatomical landmark names, see ``shankPoseISB()``.</span>
+<span class="sd">        - &#39;side&#39;: anatomical side, &#39;R&#39; or &#39;L&#39;.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    R : np.ndarray</span>
+<span class="sd">        N x 3 x 3 rotation matrix.</span>
+<span class="sd">    </span>
+<span class="sd">    T : np.ndarray</span>
+<span class="sd">        N x 3 translation vector.</span>
+<span class="sd">        </span>
+<span class="sd">    mkrsSeg : dict</span>
+<span class="sd">        Anatomical markers data in the laboratory reference frame.</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="c"># Get roto-translation matrix from cluster to laboratory reference frame</span>
+    <span class="n">R</span><span class="p">,</span> <span class="n">T</span> <span class="o">=</span> <span class="n">rigidBodySVDFun</span><span class="p">(</span><span class="n">mkrs</span><span class="p">,</span> <span class="n">clusterMkrList</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span>
+    <span class="n">gRl</span> <span class="o">=</span> <span class="n">composeRotoTranslMatrix</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="n">T</span><span class="p">)</span>
+    
+    <span class="c"># Get markers in local reference frame</span>
+    <span class="n">mkrsLoc</span> <span class="o">=</span> <span class="p">{</span><span class="n">m</span><span class="p">:</span> <span class="n">args</span><span class="p">[</span><span class="s">&#39;mkrsLoc&#39;</span><span class="p">][</span><span class="n">m</span><span class="p">]</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;LM&#39;</span><span class="p">,</span><span class="s">&#39;MM&#39;</span><span class="p">,</span><span class="s">&#39;HF&#39;</span><span class="p">,</span><span class="s">&#39;TT&#39;</span><span class="p">]}</span>
+    
+    <span class="c"># Express markers in the global reference frame</span>
+    <span class="n">mkrsSeg</span> <span class="o">=</span> <span class="n">changeMarkersReferenceFrame</span><span class="p">(</span><span class="n">mkrsLoc</span><span class="p">,</span> <span class="n">gRl</span><span class="p">)</span>
+    
+    <span class="c"># Calculate roto-translation matrix from shank to laboratory reference frame</span>
+    <span class="n">R</span><span class="p">,</span> <span class="n">T</span> <span class="o">=</span> <span class="n">shankPoseISB</span><span class="p">(</span><span class="n">mkrsSeg</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="n">args</span><span class="p">[</span><span class="s">&#39;side&#39;</span><span class="p">])</span>
+    
+    <span class="k">return</span> <span class="n">R</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">mkrsSeg</span>
+
+</div>
+<div class="viewcode-block" id="footPoseISB"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.footPoseISB">[docs]</a><span class="k">def</span> <span class="nf">footPoseISB</span><span class="p">(</span><span class="n">mkrs</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="s">&#39;R&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Calculate roto-translation matrix from foot (ISB conventions) to </span>
+<span class="sd">    laboratory reference frame.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    mkrs : dict</span>
+<span class="sd">        Markers data. Keys are marker names, values are np.ndarray N x 3, </span>
+<span class="sd">        where N is the number of time frames. Used names are:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;CA&#39;: calcalneous</span>
+<span class="sd">        - &#39;FM&#39;: first metatarsal head</span>
+<span class="sd">        - &#39;SM&#39;: second metatarsal head</span>
+<span class="sd">        - &#39;VM&#39;: fifth metatarsal head</span>
+<span class="sd">        </span>
+<span class="sd">    s : {&#39;R&#39;, &#39;L&#39;}</span>
+<span class="sd">        Anatomical side.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    R : np.ndarray</span>
+<span class="sd">        N x 3 x 3 rotation matrix.</span>
+<span class="sd">    </span>
+<span class="sd">    T : np.ndarray</span>
+<span class="sd">        N x 3 translation vector.</span>
+<span class="sd">        </span>
+<span class="sd">    References</span>
+<span class="sd">    ----------</span>
+<span class="sd">    Leardini A, Benedetti MG, Berti L, Bettinelli D, Nativo R, Giannini S.</span>
+<span class="sd">    Rear-foot, mid-foot and fore-foot motion during the stance phase of gait. </span>
+<span class="sd">    Gait Posture. 2007 Mar;25(3):453-62. Epub 2006 Sep 11. PubMed PMID: 16965916.</span>
+<span class="sd">        </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="c"># Define markers to use</span>
+    <span class="n">CA</span> <span class="o">=</span> <span class="n">mkrs</span><span class="p">[</span><span class="s">&#39;CA&#39;</span><span class="p">]</span>
+    <span class="n">FM</span> <span class="o">=</span> <span class="n">mkrs</span><span class="p">[</span><span class="s">&#39;FM&#39;</span><span class="p">]</span>
+    <span class="n">SM</span> <span class="o">=</span> <span class="n">mkrs</span><span class="p">[</span><span class="s">&#39;SM&#39;</span><span class="p">]</span>
+    <span class="n">VM</span> <span class="o">=</span> <span class="n">mkrs</span><span class="p">[</span><span class="s">&#39;VM&#39;</span><span class="p">]</span>
+    
+    <span class="c"># Create versors   </span>
+    <span class="n">Ofoo</span> <span class="o">=</span> <span class="n">CA</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">s</span> <span class="o">==</span> <span class="s">&#39;R&#39;</span><span class="p">:</span>
+        <span class="n">YfooTemp</span> <span class="o">=</span> <span class="n">getVersor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">VM</span> <span class="o">-</span> <span class="n">Ofoo</span><span class="p">,</span> <span class="n">FM</span> <span class="o">-</span> <span class="n">Ofoo</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">YfooTemp</span> <span class="o">=</span> <span class="o">-</span><span class="n">getVersor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">VM</span> <span class="o">-</span> <span class="n">Ofoo</span><span class="p">,</span> <span class="n">FM</span> <span class="o">-</span> <span class="n">Ofoo</span><span class="p">))</span>
+<span class="c">#    Xfoo = getVersor((SM - Ofoo) - np.multiply(YfooTemp,vdot2(SM - Ofoo, YfooTemp)))</span>
+    <span class="n">Xfoo</span> <span class="o">=</span> <span class="n">getVersor</span><span class="p">((</span><span class="n">SM</span> <span class="o">-</span> <span class="n">Ofoo</span><span class="p">)</span> <span class="o">-</span> <span class="n">YfooTemp</span> <span class="o">*</span> <span class="n">vdot2</span><span class="p">(</span><span class="n">SM</span> <span class="o">-</span> <span class="n">Ofoo</span><span class="p">,</span> <span class="n">YfooTemp</span><span class="p">)[:,</span><span class="bp">None</span><span class="p">])</span>
+    <span class="n">Zfoo</span> <span class="o">=</span> <span class="n">getVersor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">Xfoo</span><span class="p">,</span> <span class="n">YfooTemp</span><span class="p">))</span>
+    <span class="n">Yfoo</span> <span class="o">=</span> <span class="n">getVersor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">Zfoo</span><span class="p">,</span> <span class="n">Xfoo</span><span class="p">))</span>
+    
+    <span class="c"># Create rotation matrix from foot reference frame to laboratory reference frame</span>
+    <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">((</span><span class="n">Xfoo</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">Yfoo</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">Zfoo</span><span class="o">.</span><span class="n">T</span><span class="p">))</span>   <span class="c"># 3 x 3 x N</span>
+    <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">))</span>  <span class="c"># N x 3 x 3</span>
+    
+    <span class="c"># Return data</span>
+    <span class="k">return</span> <span class="n">R</span><span class="p">,</span> <span class="n">Ofoo</span>
+    
+</div>
+<div class="viewcode-block" id="footPoseISBWithClusterSVD"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.footPoseISBWithClusterSVD">[docs]</a><span class="k">def</span> <span class="nf">footPoseISBWithClusterSVD</span><span class="p">(</span><span class="n">mkrs</span><span class="p">,</span> <span class="n">clusterMkrList</span><span class="p">,</span> <span class="n">args</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Calculate roto-translation matrix from foot (ISB conventions) to </span>
+<span class="sd">    laboratory reference frame, using rigid segment-connected cluster of</span>
+<span class="sd">    technical markers.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters </span>
+<span class="sd">    ----------</span>
+<span class="sd">    mkrs : dict</span>
+<span class="sd">        Technical markers data. Keys are marker names, values are np.ndarray </span>
+<span class="sd">        N x 3, where N is the number of time frames.</span>
+<span class="sd">        </span>
+<span class="sd">    clusterMkrList : list</span>
+<span class="sd">        List of technical marker names to use.</span>
+<span class="sd">    </span>
+<span class="sd">    args : mixed</span>
+<span class="sd">        Additional arguments:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;mkrsLoc&#39;: dictionary where keys are marker names and values are </span>
+<span class="sd">          3-elem np.arrays indicating the coordinates in the local reference</span>
+<span class="sd">          frame. Both technical and anatomical markers are needed here. For</span>
+<span class="sd">          For anatomical landmark names, see ``footPoseISB()``.</span>
+<span class="sd">        - &#39;side&#39;: anatomical side, &#39;R&#39; or &#39;L&#39;.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    R : np.ndarray</span>
+<span class="sd">        N x 3 x 3 rotation matrix.</span>
+<span class="sd">    </span>
+<span class="sd">    T : np.ndarray</span>
+<span class="sd">        N x 3 translation vector.</span>
+<span class="sd">        </span>
+<span class="sd">    mkrsSeg : dict</span>
+<span class="sd">        Anatomical markers data in the laboratory reference frame.</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="c"># Get roto-translation matrix from cluster to laboratory reference frame</span>
+    <span class="n">R</span><span class="p">,</span> <span class="n">T</span> <span class="o">=</span> <span class="n">rigidBodySVDFun</span><span class="p">(</span><span class="n">mkrs</span><span class="p">,</span> <span class="n">clusterMkrList</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span>
+    <span class="n">gRl</span> <span class="o">=</span> <span class="n">composeRotoTranslMatrix</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="n">T</span><span class="p">)</span>
+    
+    <span class="c"># Get markers in local reference frame</span>
+    <span class="n">mkrsLoc</span> <span class="o">=</span> <span class="p">{</span><span class="n">m</span><span class="p">:</span> <span class="n">args</span><span class="p">[</span><span class="s">&#39;mkrsLoc&#39;</span><span class="p">][</span><span class="n">m</span><span class="p">]</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;CA&#39;</span><span class="p">,</span><span class="s">&#39;FM&#39;</span><span class="p">,</span><span class="s">&#39;SM&#39;</span><span class="p">,</span><span class="s">&#39;VM&#39;</span><span class="p">]}</span>
+    
+    <span class="c"># Express markers in the global reference frame</span>
+    <span class="n">mkrsSeg</span> <span class="o">=</span> <span class="n">changeMarkersReferenceFrame</span><span class="p">(</span><span class="n">mkrsLoc</span><span class="p">,</span> <span class="n">gRl</span><span class="p">)</span>
+    
+    <span class="c"># Calculate roto-translation matrix from foot to laboratory reference frame</span>
+    <span class="n">R</span><span class="p">,</span> <span class="n">T</span> <span class="o">=</span> <span class="n">footPoseISB</span><span class="p">(</span><span class="n">mkrsSeg</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="n">args</span><span class="p">[</span><span class="s">&#39;side&#39;</span><span class="p">])</span>
+    
+    <span class="k">return</span> <span class="n">R</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">mkrsSeg</span>
+    
+    </div>
+<div class="viewcode-block" id="calcaneusPose"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.calcaneusPose">[docs]</a><span class="k">def</span> <span class="nf">calcaneusPose</span><span class="p">(</span><span class="n">mkrs</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="s">&#39;R&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Calculate roto-translation matrix from calcaneous to </span>
+<span class="sd">    laboratory reference frame.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    mkrs : dict</span>
+<span class="sd">        Markers data. Keys are marker names, values are np.ndarray N x 3, </span>
+<span class="sd">        where N is the number of time frames. Used names are:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;CA&#39;: calcalneous</span>
+<span class="sd">        - &#39;PT&#39;: lateral apex of the peroneal tubercle</span>
+<span class="sd">        - &#39;ST&#39;: most medial apex of the sustentaculum tali</span>
+<span class="sd">        </span>
+<span class="sd">    s : {&#39;R&#39;, &#39;L&#39;}</span>
+<span class="sd">        Anatomical side.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    R : np.ndarray</span>
+<span class="sd">        N x 3 x 3 rotation matrix.</span>
+<span class="sd">    </span>
+<span class="sd">    T : np.ndarray</span>
+<span class="sd">        N x 3 translation vector.</span>
+<span class="sd">        </span>
+<span class="sd">    References</span>
+<span class="sd">    ----------</span>
+<span class="sd">    Leardini A, Benedetti MG, Berti L, Bettinelli D, Nativo R, Giannini S.</span>
+<span class="sd">    Rear-foot, mid-foot and fore-foot motion during the stance phase of gait. </span>
+<span class="sd">    Gait Posture. 2007 Mar;25(3):453-62. Epub 2006 Sep 11. PubMed PMID: 16965916.</span>
+<span class="sd">        </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="c"># Define markers to use</span>
+    <span class="n">CA</span> <span class="o">=</span> <span class="n">mkrs</span><span class="p">[</span><span class="s">&#39;CA&#39;</span><span class="p">]</span>
+    <span class="n">PT</span> <span class="o">=</span> <span class="n">mkrs</span><span class="p">[</span><span class="s">&#39;PT&#39;</span><span class="p">]</span>
+    <span class="n">ST</span> <span class="o">=</span> <span class="n">mkrs</span><span class="p">[</span><span class="s">&#39;ST&#39;</span><span class="p">]</span>
+    
+    <span class="c"># Create versors</span>
+    <span class="n">IC</span> <span class="o">=</span> <span class="p">(</span><span class="n">ST</span> <span class="o">+</span> <span class="n">PT</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
+    <span class="n">Ocal</span> <span class="o">=</span> <span class="n">CA</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">Xcal</span> <span class="o">=</span> <span class="n">getVersor</span><span class="p">(</span><span class="n">IC</span> <span class="o">-</span> <span class="n">Ocal</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">s</span> <span class="o">==</span> <span class="s">&#39;R&#39;</span><span class="p">:</span>
+        <span class="n">YcalTemp</span> <span class="o">=</span> <span class="n">getVersor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">Xcal</span><span class="p">,</span> <span class="n">ST</span> <span class="o">-</span> <span class="n">Ocal</span><span class="p">))</span> 
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">YcalTemp</span> <span class="o">=</span> <span class="o">-</span><span class="n">getVersor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">Xcal</span><span class="p">,</span> <span class="n">ST</span> <span class="o">-</span> <span class="n">Ocal</span><span class="p">))</span> 
+    <span class="n">Zcal</span> <span class="o">=</span> <span class="n">getVersor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">Xcal</span><span class="p">,</span> <span class="n">YcalTemp</span><span class="p">))</span>
+    <span class="n">Ycal</span> <span class="o">=</span> <span class="n">getVersor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">Zcal</span><span class="p">,</span> <span class="n">Xcal</span><span class="p">))</span>
+    
+    <span class="c"># Create rotation matrix from foot reference frame to laboratory reference frame</span>
+    <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">((</span><span class="n">Xcal</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">Ycal</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">Zcal</span><span class="o">.</span><span class="n">T</span><span class="p">))</span>   <span class="c"># 3 x 3 x N</span>
+    <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">))</span>  <span class="c"># N x 3 x 3</span>
+    
+    <span class="c"># Return data</span>
+    <span class="k">return</span> <span class="n">R</span><span class="p">,</span> <span class="n">Ocal</span>
+    
+</div>
+<div class="viewcode-block" id="calcaneusPoseWithClusterSVD"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.calcaneusPoseWithClusterSVD">[docs]</a><span class="k">def</span> <span class="nf">calcaneusPoseWithClusterSVD</span><span class="p">(</span><span class="n">mkrs</span><span class="p">,</span> <span class="n">clusterMkrList</span><span class="p">,</span> <span class="n">args</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Calculate roto-translation matrix from calcaneous to </span>
+<span class="sd">    laboratory reference frame, using rigid segment-connected cluster of</span>
+<span class="sd">    technical markers.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters </span>
+<span class="sd">    ----------</span>
+<span class="sd">    mkrs : dict</span>
+<span class="sd">        Technical markers data. Keys are marker names, values are np.ndarray </span>
+<span class="sd">        N x 3, where N is the number of time frames.</span>
+<span class="sd">        </span>
+<span class="sd">    clusterMkrList : list</span>
+<span class="sd">        List of technical marker names to use.</span>
+<span class="sd">    </span>
+<span class="sd">    args : mixed</span>
+<span class="sd">        Additional arguments:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;mkrsLoc&#39;: dictionary where keys are marker names and values are </span>
+<span class="sd">          3-elem np.arrays indicating the coordinates in the local reference</span>
+<span class="sd">          frame. Both technical and anatomical markers are needed here. For</span>
+<span class="sd">          For anatomical landmark names, see ``calcaneusPoseISB()``.</span>
+<span class="sd">        - &#39;side&#39;: anatomical side, &#39;R&#39; or &#39;L&#39;.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    R : np.ndarray</span>
+<span class="sd">        N x 3 x 3 rotation matrix.</span>
+<span class="sd">    </span>
+<span class="sd">    T : np.ndarray</span>
+<span class="sd">        N x 3 translation vector.</span>
+<span class="sd">        </span>
+<span class="sd">    mkrsSeg : dict</span>
+<span class="sd">        Anatomical markers data in the laboratory reference frame.</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="c"># Get roto-translation matrix from cluster to laboratory reference frame</span>
+    <span class="n">R</span><span class="p">,</span> <span class="n">T</span> <span class="o">=</span> <span class="n">rigidBodySVDFun</span><span class="p">(</span><span class="n">mkrs</span><span class="p">,</span> <span class="n">clusterMkrList</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span>
+    <span class="n">gRl</span> <span class="o">=</span> <span class="n">composeRotoTranslMatrix</span><span class="p">(</span><span class="n">R</span><span class="p">,</span> <span class="n">T</span><span class="p">)</span>
+    
+    <span class="c"># Get markers in local reference frame</span>
+    <span class="n">mkrsLoc</span> <span class="o">=</span> <span class="p">{</span><span class="n">m</span><span class="p">:</span> <span class="n">args</span><span class="p">[</span><span class="s">&#39;mkrsLoc&#39;</span><span class="p">][</span><span class="n">m</span><span class="p">]</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;CA&#39;</span><span class="p">,</span><span class="s">&#39;PT&#39;</span><span class="p">,</span><span class="s">&#39;ST&#39;</span><span class="p">]}</span>
+    
+    <span class="c"># Express markers in the global reference frame</span>
+    <span class="n">mkrsSeg</span> <span class="o">=</span> <span class="n">changeMarkersReferenceFrame</span><span class="p">(</span><span class="n">mkrsLoc</span><span class="p">,</span> <span class="n">gRl</span><span class="p">)</span>
+    
+    <span class="c"># Calculate roto-translation matrix from foot to laboratory reference frame</span>
+    <span class="n">R</span><span class="p">,</span> <span class="n">T</span> <span class="o">=</span> <span class="n">calcaneusPose</span><span class="p">(</span><span class="n">mkrsSeg</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="n">args</span><span class="p">[</span><span class="s">&#39;side&#39;</span><span class="p">])</span>
+    
+    <span class="k">return</span> <span class="n">R</span><span class="p">,</span> <span class="n">T</span><span class="p">,</span> <span class="n">mkrsSeg</span>
+    
+
+</div>
+<div class="viewcode-block" id="ges"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.ges">[docs]</a><span class="k">def</span> <span class="nf">ges</span><span class="p">(</span><span class="n">Rvect</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Calculate Groot &amp; Suntay anatomical joint angles from proximal and distal</span>
+<span class="sd">    segment rotation matrices. Angles are related to flexion-extension (FE) axis </span>
+<span class="sd">    of the proximal segment, internal-external (IE) axis of the distal segment,</span>
+<span class="sd">    ab-adduction (AA) floating axis.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    Rvect : np.ndarray</span>
+<span class="sd">        18-elem vector representing row-flattened version of proximal and </span>
+<span class="sd">        distal segment rotation matrix from global reference frame to segment.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list</span>
+<span class="sd">        List of Groot &amp; Suntay angles (FE, AA, EI).</span>
+<span class="sd">    </span>
+<span class="sd">    References</span>
+<span class="sd">    ----------</span>
+<span class="sd">    Grood et Suntay, A joint coordinate system for the clinical description of</span>
+<span class="sd">    three- dimensional motion: application to the knee.</span>
+<span class="sd">    J Biomech. Engng 1983 105: 136-144</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="n">R1v</span> <span class="o">=</span> <span class="n">Rvect</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">9</span><span class="p">]</span>
+    <span class="n">R2v</span> <span class="o">=</span> <span class="n">Rvect</span><span class="p">[</span><span class="mi">9</span><span class="p">:</span><span class="mi">18</span><span class="p">]</span>
+    <span class="n">e2</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">R2v</span><span class="p">[</span><span class="mi">3</span><span class="p">:</span><span class="mi">6</span><span class="p">],</span><span class="n">R1v</span><span class="p">[</span><span class="mi">6</span><span class="p">:</span><span class="mi">9</span><span class="p">])</span> <span class="c"># e2 = e3 x e1</span>
+    <span class="c">#---- i/e rotation ----</span>
+    <span class="n">e2zd</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">e2</span><span class="p">,</span><span class="o">-</span><span class="n">R2v</span><span class="p">[</span><span class="mi">6</span><span class="p">:</span><span class="mi">9</span><span class="p">])</span>
+    <span class="n">e2xd</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">e2</span><span class="p">,</span><span class="n">R2v</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">3</span><span class="p">])</span>
+    <span class="n">IE</span><span class="o">=-</span><span class="n">np</span><span class="o">.</span><span class="n">arctan2</span><span class="p">(</span><span class="n">e2zd</span><span class="p">,</span><span class="n">e2xd</span><span class="p">)</span>
+    <span class="c">#---- flexion  ----</span>
+    <span class="n">e2yp</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">e2</span><span class="p">,</span><span class="n">R1v</span><span class="p">[</span><span class="mi">3</span><span class="p">:</span><span class="mi">6</span><span class="p">])</span>
+    <span class="n">e2xp</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">e2</span><span class="p">,</span><span class="n">R1v</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">3</span><span class="p">])</span>
+    <span class="n">FE</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">arctan2</span><span class="p">(</span><span class="n">e2yp</span><span class="p">,</span><span class="n">e2xp</span><span class="p">)</span>
+    <span class="c">#---- ab-adduction ----</span>
+    <span class="n">bet</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">R2v</span><span class="p">[</span><span class="mi">3</span><span class="p">:</span><span class="mi">6</span><span class="p">],</span><span class="n">R1v</span><span class="p">[</span><span class="mi">6</span><span class="p">:</span><span class="mi">9</span><span class="p">])</span>
+    <span class="n">AA</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">arccos</span><span class="p">(</span><span class="n">bet</span><span class="p">)</span><span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="o">/</span><span class="mi">2</span>
+    <span class="n">res</span> <span class="o">=</span> <span class="n">FE</span><span class="p">,</span> <span class="n">AA</span><span class="p">,</span> <span class="n">IE</span>
+    <span class="k">return</span> <span class="n">res</span>
+    
+    </div>
+<div class="viewcode-block" id="R2zxy"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.R2zxy">[docs]</a><span class="k">def</span> <span class="nf">R2zxy</span><span class="p">(</span><span class="n">Rvect</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Convert joint rotation matrix to ZXY Euler sequence.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------   </span>
+<span class="sd">    Rvect : np.ndarray</span>
+<span class="sd">        A 9-elements array representing concatenated rows of the joint </span>
+<span class="sd">        rotation matrix.</span>
+<span class="sd">            </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list</span>
+<span class="sd">        A list of 3 angle values.</span>
+<span class="sd">        </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="n">row1</span> <span class="o">=</span> <span class="n">Rvect</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">3</span><span class="p">]</span>
+    <span class="n">row2</span> <span class="o">=</span> <span class="n">Rvect</span><span class="p">[</span><span class="mi">3</span><span class="p">:</span><span class="mi">6</span><span class="p">]</span>
+    <span class="n">row3</span> <span class="o">=</span> <span class="n">Rvect</span><span class="p">[</span><span class="mi">6</span><span class="p">:</span><span class="mi">9</span><span class="p">]</span>
+    <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">matrix</span><span class="p">([</span><span class="n">row1</span><span class="p">,</span><span class="n">row2</span><span class="p">,</span><span class="n">row3</span><span class="p">])</span> <span class="c"># 3 x 3 joint rotation matrix</span>
+    <span class="n">x1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arcsin</span><span class="p">(</span><span class="n">R</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">])</span> 
+    <span class="n">sy</span> <span class="o">=-</span><span class="n">R</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">x1</span><span class="p">)</span>
+    <span class="n">cy</span> <span class="o">=</span> <span class="n">R</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">]</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">x1</span><span class="p">)</span>
+    <span class="n">y1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arctan2</span><span class="p">(</span><span class="n">sy</span><span class="p">,</span><span class="n">cy</span><span class="p">)</span>
+    <span class="n">sz</span> <span class="o">=-</span><span class="n">R</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">x1</span><span class="p">)</span>
+    <span class="n">cz</span> <span class="o">=</span> <span class="n">R</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">x1</span><span class="p">)</span>
+    <span class="n">z1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arctan2</span><span class="p">(</span><span class="n">sz</span><span class="p">,</span><span class="n">cz</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">x1</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+      <span class="n">x2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">-</span> <span class="n">x1</span>
+    <span class="k">else</span><span class="p">:</span>
+      <span class="n">x2</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">-</span> <span class="n">x1</span>
+    <span class="n">sy</span> <span class="o">=-</span><span class="n">R</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">x2</span><span class="p">)</span>
+    <span class="n">cy</span> <span class="o">=</span> <span class="n">R</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">]</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">x2</span><span class="p">)</span>
+    <span class="n">y2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arctan2</span><span class="p">(</span><span class="n">sy</span><span class="p">,</span><span class="n">cy</span><span class="p">)</span>
+    <span class="n">sz</span> <span class="o">=-</span><span class="n">R</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">x2</span><span class="p">)</span>
+    <span class="n">cz</span> <span class="o">=</span> <span class="n">R</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">/</span><span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">x2</span><span class="p">)</span>
+    <span class="n">z2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arctan2</span><span class="p">(</span><span class="n">sz</span><span class="p">,</span><span class="n">cz</span><span class="p">)</span>
+    <span class="k">if</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="o">/</span><span class="mi">2</span> <span class="o">&lt;=</span> <span class="n">x1</span> <span class="ow">and</span> <span class="n">x1</span> <span class="o">&lt;=</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="o">/</span><span class="mi">2</span><span class="p">:</span>
+      <span class="n">yAngle</span><span class="o">=</span><span class="n">y1</span>
+      <span class="n">zAngle</span><span class="o">=</span><span class="n">z1</span>
+      <span class="n">xAngle</span><span class="o">=</span><span class="n">x1</span>
+    <span class="k">else</span><span class="p">:</span>
+      <span class="n">yAngle</span><span class="o">=</span><span class="n">y2</span>
+      <span class="n">zAngle</span><span class="o">=</span><span class="n">z2</span>
+      <span class="n">xAngle</span><span class="o">=</span><span class="n">x2</span>
+    <span class="n">res</span> <span class="o">=</span> <span class="n">zAngle</span><span class="p">,</span> <span class="n">xAngle</span><span class="p">,</span> <span class="n">yAngle</span>
+    <span class="k">return</span> <span class="n">res</span>
+    
+</div>
+<div class="viewcode-block" id="getJointAngles"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.kine.getJointAngles">[docs]</a><span class="k">def</span> <span class="nf">getJointAngles</span><span class="p">(</span><span class="n">R1</span><span class="p">,</span> <span class="n">R2</span><span class="p">,</span> <span class="n">R2anglesFun</span><span class="o">=</span><span class="n">R2zxy</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Calculate 3 joint angles between 2 rigid bodies.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    R1 : np.ndarray</span>
+<span class="sd">        N x 3 x 3 rotation matrices from rigid body to global reference frame for body 1 (N time frames).</span>
+<span class="sd">        </span>
+<span class="sd">    R2 : np.ndarray</span>
+<span class="sd">        N x 3 x 3 rotation matrices from rigid body to global reference frame for body 2.</span>
+<span class="sd">        </span>
+<span class="sd">    R2anglesFun : func</span>
+<span class="sd">        Function converting from joint rotation matrix to angles (see ``R2zxy()``).</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray</span>
+<span class="sd">        N x 3 matrix of angles (in *deg*)</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="c"># METHOD 1</span>
+    <span class="n">N</span><span class="p">,</span> <span class="n">dim1</span><span class="p">,</span> <span class="n">dim2</span> <span class="o">=</span> <span class="n">R1</span><span class="o">.</span><span class="n">shape</span>
+    <span class="n">Rj</span> <span class="o">=</span> <span class="n">dot3</span><span class="p">(</span><span class="n">inv2</span><span class="p">(</span><span class="n">R1</span><span class="p">),</span> <span class="n">R2</span><span class="p">)</span>
+    <span class="n">Rjv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">squeeze</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">Rj</span><span class="p">,(</span><span class="n">N</span><span class="p">,</span><span class="mi">9</span><span class="p">)))</span>
+    <span class="n">angles</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">apply_along_axis</span><span class="p">(</span><span class="n">R2anglesFun</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">Rjv</span><span class="p">)</span>
+    <span class="c"># NETHOD 2: ges (Source: Leardini, IOR)</span>
+<span class="c">#    R1v = np.squeeze(np.reshape(inv2(R1),(N,9)))</span>
+<span class="c">#    R2v = np.squeeze(np.reshape(inv2(R2),(N,9)))</span>
+<span class="c">#    Rvect = np.hstack((R1v,R2v))</span>
+<span class="c">#    angles = np.apply_along_axis(ges, 1, Rvect)</span>
+    <span class="c"># Correct for gimbal-lock</span>
+    <span class="c">#angles = correctGimbal(angles)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">rad2deg</span><span class="p">(</span><span class="n">angles</span><span class="p">)</span>
+</pre></div></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">Py3DFreeHandUS 1.0 documentation</a> &raquo;</li>
+          <li><a href="../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2015, Davide Monari.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

@@ -1,0 +1,861 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Py3DFreeHandUS.particle_filter &mdash; Py3DFreeHandUS 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="../../_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="Py3DFreeHandUS 1.0 documentation" href="../../index.html" />
+    <link rel="up" title="Module code" href="../index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">Py3DFreeHandUS 1.0 documentation</a> &raquo;</li>
+          <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for Py3DFreeHandUS.particle_filter</h1><div class="highlight"><pre>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">.. module:: particle_filter</span>
+<span class="sd">   :synopsis: particle filter implementation.</span>
+
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">scipy.interpolate</span> <span class="kn">as</span> <span class="nn">interpolate</span>
+<span class="kn">from</span> <span class="nn">image_utils</span> <span class="kn">import</span> <span class="n">histogramsSimilarity</span><span class="p">,</span> <span class="n">NCC</span><span class="p">,</span> <span class="n">createRandomInMaskCoords</span>
+<span class="kn">import</span> <span class="nn">cv2</span>
+    
+    
+    
+<div class="viewcode-block" id="ParticleFilter"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ParticleFilter">[docs]</a><span class="k">class</span> <span class="nc">ParticleFilter</span><span class="p">:</span>
+    <span class="sd">&quot;&quot;&quot;Particle filter implementation.</span>
+<span class="sd">    </span>
+<span class="sd">    These are the name conventions for variables:</span>
+<span class="sd">   </span>
+<span class="sd">    - nS: number of state variables.</span>
+<span class="sd">    </span>
+<span class="sd">    - nI: number of iterations performed.</span>
+<span class="sd">    </span>
+<span class="sd">    - nP: number of particles.</span>
+<span class="sd">    </span>
+<span class="sd">    - x: np.ndarray (nS x nP). Matrix containing data for each particle,</span>
+<span class="sd">      for current iteration. Each row is a state variable.</span>
+<span class="sd">    </span>
+<span class="sd">    - xNext: np.ndarray (nS x nP). Matrix containing data for each particle, </span>
+<span class="sd">      for next iteration. Each row is a state variable.</span>
+<span class="sd">    </span>
+<span class="sd">    - xNextFromWeights: np.ndarray (nS). Vector containing state estimation</span>
+<span class="sd">      for next iteration, only by using weights.</span>
+<span class="sd">    </span>
+<span class="sd">    - xNextEst: np.ndarray (nS). Vector containing state estimation for next</span>
+<span class="sd">      iteration.</span>
+<span class="sd">    </span>
+<span class="sd">    - xEst: np.ndarray (nS x nI). Matrix containing history of estimated states, </span>
+<span class="sd">      in columns.</span>
+<span class="sd">    </span>
+<span class="sd">    - w: np.ndarray (nP). Vector of particle weights for current iteration.</span>
+<span class="sd">    </span>
+<span class="sd">    - wNext: np.ndarray (nP). Vector of particle weights for next iteration.</span>
+<span class="sd">    </span>
+<span class="sd">    - wNextNorm: np.ndarray (nP). wNext normalized on their sum.</span>
+<span class="sd">    </span>
+<span class="sd">    - addData: mixed. See method ``setAdditionalData()``.</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Constructor</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transModel</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">observModel</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">estimFromWeightsModel</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">estimModel</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xNext</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nParticles</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">w</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xEst</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">addData</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xNext</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">wNext</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">wNextNorm</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xNextFromWeights</span> <span class="o">=</span> <span class="bp">None</span>
+        
+<div class="viewcode-block" id="ParticleFilter.setProbTransModel"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ParticleFilter.setProbTransModel">[docs]</a>    <span class="k">def</span> <span class="nf">setProbTransModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Set the probability/state transition model (i.e. p(x+1|x))</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model : fun</span>
+<span class="sd">            Function defining the transition model. The function must have</span>
+<span class="sd">            these inputs: x, xEst (normally not necessary here), addData.</span>
+<span class="sd">            It must return xNext.</span>
+<span class="sd">            </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transModel</span> <span class="o">=</span> <span class="n">model</span>
+    </div>
+<div class="viewcode-block" id="ParticleFilter.setProbObservModel"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ParticleFilter.setProbObservModel">[docs]</a>    <span class="k">def</span> <span class="nf">setProbObservModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Set the observation model (i.e. p(y|x))</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model : fun</span>
+<span class="sd">            Function defining the observation model. The function must have</span>
+<span class="sd">            these inputs: xNext, xEst, w, addData.</span>
+<span class="sd">            It must return wNext.</span>
+<span class="sd">            </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">observModel</span> <span class="o">=</span> <span class="n">model</span>
+        </div>
+<div class="viewcode-block" id="ParticleFilter.setStateEstimatorFromWeightsFun"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ParticleFilter.setStateEstimatorFromWeightsFun">[docs]</a>    <span class="k">def</span> <span class="nf">setStateEstimatorFromWeightsFun</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Set the model for state estimation from weights </span>
+<span class="sd">        (e.g. maximum likelyhood, expectation, etc.)</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model : fun</span>
+<span class="sd">            Function defining the state estimation model from weights. </span>
+<span class="sd">            The function must have these inputs: xNext, wNextNorm.</span>
+<span class="sd">            It must return xNextFromWeights.</span>
+<span class="sd">            </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">estimFromWeightsModel</span> <span class="o">=</span> <span class="n">model</span>
+        </div>
+<div class="viewcode-block" id="ParticleFilter.setProbEstimModel"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ParticleFilter.setProbEstimModel">[docs]</a>    <span class="k">def</span> <span class="nf">setProbEstimModel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Set the a-posteriori probability model (i.e. p(x|Y))</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        model : fun</span>
+<span class="sd">            Function defining the observation model. The function must have</span>
+<span class="sd">            these inputs: xEst, xNext, wNextNorm, xNextFromWeights, addData.</span>
+<span class="sd">            It must return xNextEst.</span>
+<span class="sd">            </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">estimModel</span> <span class="o">=</span> <span class="n">model</span>
+        </div>
+<div class="viewcode-block" id="ParticleFilter.setParticles"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ParticleFilter.setParticles">[docs]</a>    <span class="k">def</span> <span class="nf">setParticles</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Set particles data for current iteration.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        x : np.ndarray (nS x nP)</span>
+<span class="sd">            See x.</span>
+<span class="sd">            </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">x</span> <span class="o">=</span> <span class="n">x</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xNext</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nParticles</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        </div>
+<div class="viewcode-block" id="ParticleFilter.setParticleWeights"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ParticleFilter.setParticleWeights">[docs]</a>    <span class="k">def</span> <span class="nf">setParticleWeights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">w</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Set particles weights for current interation.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        w : np.ndarray (nP)</span>
+<span class="sd">            See w.</span>
+<span class="sd">            </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">w</span> <span class="o">=</span> <span class="n">w</span>
+    </div>
+<div class="viewcode-block" id="ParticleFilter.setState"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ParticleFilter.setState">[docs]</a>    <span class="k">def</span> <span class="nf">setState</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">xEst</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Set estimated states history.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        xEst : np.ndarray (nS x nI)</span>
+<span class="sd">            See xEst.</span>
+<span class="sd">            </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xEst</span> <span class="o">=</span> <span class="n">xEst</span>
+        </div>
+<div class="viewcode-block" id="ParticleFilter.setAdditionalData"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ParticleFilter.setAdditionalData">[docs]</a>    <span class="k">def</span> <span class="nf">setAdditionalData</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Set additional data, to be passed to and used by model functions.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        data : mixed</span>
+<span class="sd">            This can be any kind of data.</span>
+<span class="sd">            </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">addData</span> <span class="o">=</span> <span class="n">data</span>
+        </div>
+<div class="viewcode-block" id="ParticleFilter.predict"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ParticleFilter.predict">[docs]</a>    <span class="k">def</span> <span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Perform the prediction step.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xNext</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">xEst</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">addData</span><span class="p">)</span>
+        </div>
+<div class="viewcode-block" id="ParticleFilter.getPredictedParticles"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ParticleFilter.getPredictedParticles">[docs]</a>    <span class="k">def</span> <span class="nf">getPredictedParticles</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get predicted particles.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray (nS x nP)</span>
+<span class="sd">            See xNext.</span>
+<span class="sd">    </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">xNext</span>
+    </div>
+<div class="viewcode-block" id="ParticleFilter.update"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ParticleFilter.update">[docs]</a>    <span class="k">def</span> <span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Perform the update (and weights normalization) step.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">wNext</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">observModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">xNext</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">xEst</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">addData</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">wNextNorm</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">wNext</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">wNext</span><span class="p">)</span>        
+        </div>
+<div class="viewcode-block" id="ParticleFilter.getUpdatedParticleWeights"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ParticleFilter.getUpdatedParticleWeights">[docs]</a>    <span class="k">def</span> <span class="nf">getUpdatedParticleWeights</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get weights for updated particles.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray (nP)</span>
+<span class="sd">            See wNextNorm.</span>
+<span class="sd">    </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">wNextNorm</span>
+        </div>
+<div class="viewcode-block" id="ParticleFilter.estimateStateFromWeights"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ParticleFilter.estimateStateFromWeights">[docs]</a>    <span class="k">def</span> <span class="nf">estimateStateFromWeights</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Estimate state for next iteration, from particle weights only.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xNextFromWeights</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">estimFromWeightsModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">xNext</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">wNextNorm</span><span class="p">)</span>
+        </div>
+<div class="viewcode-block" id="ParticleFilter.getEstimatedStateFromWeights"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ParticleFilter.getEstimatedStateFromWeights">[docs]</a>    <span class="k">def</span> <span class="nf">getEstimatedStateFromWeights</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get state for next iteration, from particle weights only.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray (nS)</span>
+<span class="sd">            See xNextFromWeights.</span>
+<span class="sd">    </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">xNextFromWeights</span>
+            </div>
+<div class="viewcode-block" id="ParticleFilter.estimateNextState"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ParticleFilter.estimateNextState">[docs]</a>    <span class="k">def</span> <span class="nf">estimateNextState</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Estimate and return state for next iteration.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray (nS)</span>
+<span class="sd">            See xNextEst.</span>
+<span class="sd">    </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">estimModel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">xEst</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">xNext</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">wNextNorm</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">xNextFromWeights</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">addData</span><span class="p">)</span>
+        </div>
+<div class="viewcode-block" id="ParticleFilter.getEffectParticlesNumber"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ParticleFilter.getEffectParticlesNumber">[docs]</a>    <span class="k">def</span> <span class="nf">getEffectParticlesNumber</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Get the number of effective particles, calculated by the inverse</span>
+<span class="sd">        of the sum of squared normalized weights.</span>
+<span class="sd">        </span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        int</span>
+<span class="sd">            Number of effective particles.</span>
+<span class="sd">    </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">nEffParticles</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="mf">1.</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">wNextNorm</span><span class="o">**</span><span class="mi">2</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">nEffParticles</span>
+    </div>
+<div class="viewcode-block" id="ParticleFilter.resample"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ParticleFilter.resample">[docs]</a>    <span class="k">def</span> <span class="nf">resample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s">&#39;inverse_transform&#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Perform the resampling step.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        mode : str</span>
+<span class="sd">            Resampling method.</span>
+<span class="sd">            If &#39;inverse_transform&#39;, the algorithm used is the inverse transform</span>
+<span class="sd">            resampling.</span>
+<span class="sd">        </span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray (nS x nP)</span>
+<span class="sd">            Matrix of the same size of x, but containing only particles with </span>
+<span class="sd">            heeavier weights.</span>
+<span class="sd">            </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">pdf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">wNextNorm</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nParticles</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="s">&#39;inverse_transform&#39;</span><span class="p">:</span>
+            <span class="n">idx</span> <span class="o">=</span> <span class="n">inverseTransformSampling</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">pdf</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nParticles</span><span class="p">)</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">xNext</span><span class="p">[:,</span><span class="n">idx</span><span class="o">.</span><span class="n">round</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)]</span>
+        <span class="k">return</span> <span class="n">x</span>
+        
+        </div></div>
+<div class="viewcode-block" id="inverseTransformSampling"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.inverseTransformSampling">[docs]</a><span class="k">def</span> <span class="nf">inverseTransformSampling</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">pdf</span><span class="p">,</span> <span class="n">nSamples</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Perform data resampling based on inverse transform.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    x : np.ndarray (nS x nP)</span>
+<span class="sd">        Matrix where each column represents a sample.</span>
+<span class="sd">        </span>
+<span class="sd">    pdf : np.ndarray (nP)</span>
+<span class="sd">        Probability for each sample.</span>
+<span class="sd">        </span>
+<span class="sd">    nSamples : int</span>
+<span class="sd">        Number of samples to be resampled.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray (nS x nP)</span>
+<span class="sd">        Matrix of the same size of x, but containing only particles with </span>
+<span class="sd">        heavier weights.</span>
+<span class="sd">                </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># Inspired by http://www.nehalemlabs.net/prototype/blog/2013/12/16/how-to-do-inverse-transformation-sampling-in-scipy-and-numpy/</span>
+    <span class="n">cumValues</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">pdf</span><span class="p">)</span>
+    <span class="n">cumValues</span> <span class="o">/=</span> <span class="n">cumValues</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="c"># can be removed later</span>
+    <span class="n">invCdf</span> <span class="o">=</span> <span class="n">interpolate</span><span class="o">.</span><span class="n">interp1d</span><span class="p">(</span><span class="n">cumValues</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">bounds_error</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">fill_value</span><span class="o">=</span><span class="mf">0.</span><span class="p">)</span>
+    <span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="n">nSamples</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">invCdf</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+            
+        
+</div>
+<div class="viewcode-block" id="E"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.E">[docs]</a><span class="k">def</span> <span class="nf">E</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Calculate Weighted average (expectation estimator) of samples.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    x : np.ndarray (nS x nP)</span>
+<span class="sd">        Matrix where each column represents a sample.</span>
+<span class="sd">        </span>
+<span class="sd">    w : np.ndarray (nP)</span>
+<span class="sd">        Probability (weight) for each sample.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray (nS)</span>
+<span class="sd">        Estimated vector.    </span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">xOut</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">average</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">weights</span><span class="o">=</span><span class="n">w</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">xOut</span>
+    
+       </div>
+<div class="viewcode-block" id="ML"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.ML">[docs]</a><span class="k">def</span> <span class="nf">ML</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">w</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Calculate maximum likelihood estimation from samples (i.e. the sample</span>
+<span class="sd">    with the higher weight).</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    x : np.ndarray (nS x nP)</span>
+<span class="sd">        Matrix where each column represents a sample.</span>
+<span class="sd">        </span>
+<span class="sd">    w : np.ndarray (nP)</span>
+<span class="sd">        Probability (weight) for each sample.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray (nS)</span>
+<span class="sd">        Estimated vector.    </span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">xOut</span> <span class="o">=</span> <span class="n">x</span><span class="p">[:,</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">w</span><span class="p">)]</span>
+    <span class="k">return</span> <span class="n">xOut</span>
+    
+</div>
+<div class="viewcode-block" id="arm01ConstVelFun"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.arm01ConstVelFun">[docs]</a><span class="k">def</span> <span class="nf">arm01ConstVelFun</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">xEst</span><span class="p">,</span> <span class="n">addData</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Implement first-oder autoregressive model (constant velocity) for a </span>
+<span class="sd">    2D point. State vector is composed by x and y position, followed by x and</span>
+<span class="sd">    y velocity. Gaussian noise is added to both position and velocity.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    x : np.ndarray (nS x nP)</span>
+<span class="sd">        See x.</span>
+<span class="sd">    </span>
+<span class="sd">    xEst : np.ndarray (nS x nI)</span>
+<span class="sd">        See xEst.</span>
+<span class="sd">        </span>
+<span class="sd">    addData : dict</span>
+<span class="sd">        See addData.</span>
+<span class="sd">        It must contain the key &#39;otherPars&#39;containing the following keys:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;sigmaPos&#39;: 2-elem vector containing standard deviation for the </span>
+<span class="sd">          position noise (x and y)</span>
+<span class="sd">          </span>
+<span class="sd">        - &#39;sigmaVel&#39;: 2-elem vector containing standard deviation for the </span>
+<span class="sd">          velocity noise (x and y)</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray (nS x nP)</span>
+<span class="sd">        See xNext.</span>
+<span class="sd">        </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pars</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;otherPars&#39;</span><span class="p">]</span>
+    <span class="n">sigmaPos</span> <span class="o">=</span> <span class="n">pars</span><span class="p">[</span><span class="s">&#39;sigmaPos&#39;</span><span class="p">][:,</span><span class="bp">None</span><span class="p">]</span>
+    <span class="n">sigmaVel</span> <span class="o">=</span> <span class="n">pars</span><span class="p">[</span><span class="s">&#39;sigmaVel&#39;</span><span class="p">][:,</span><span class="bp">None</span><span class="p">]</span>
+    <span class="n">nParticles</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="mf">1.</span>
+    <span class="n">noise</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">4</span><span class="p">,</span><span class="n">nParticles</span><span class="p">))</span> 
+    <span class="n">noise</span><span class="p">[:</span><span class="mi">2</span><span class="p">,:]</span> <span class="o">=</span> <span class="n">sigmaPos</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="n">nParticles</span><span class="p">)</span>
+    <span class="n">noise</span><span class="p">[</span><span class="mi">2</span><span class="p">:,:]</span> <span class="o">=</span> <span class="n">sigmaVel</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="n">nParticles</span><span class="p">)</span>
+    <span class="n">xNext</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty_like</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">xNext</span><span class="p">[:</span><span class="mi">2</span><span class="p">,:]</span> <span class="o">=</span> <span class="n">x</span><span class="p">[:</span><span class="mi">2</span><span class="p">,:]</span> <span class="o">+</span> <span class="n">x</span><span class="p">[</span><span class="mi">2</span><span class="p">:,:]</span><span class="o">*</span><span class="n">dt</span> <span class="o">+</span> <span class="n">noise</span><span class="p">[:</span><span class="mi">2</span><span class="p">,:]</span>
+    <span class="n">xNext</span><span class="p">[</span><span class="mi">2</span><span class="p">:,:]</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="mi">2</span><span class="p">:,:]</span> <span class="o">+</span> <span class="n">noise</span><span class="p">[</span><span class="mi">2</span><span class="p">:,:]</span>
+    <span class="k">return</span> <span class="n">xNext</span>
+    
+    </div>
+<div class="viewcode-block" id="arm01ConstVelEstFun"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.arm01ConstVelEstFun">[docs]</a><span class="k">def</span> <span class="nf">arm01ConstVelEstFun</span><span class="p">(</span><span class="n">xEst</span><span class="p">,</span> <span class="n">xFromWeights</span><span class="p">,</span> <span class="n">pars</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Implement a-posteriori probability model, with adaptive state, for </span>
+<span class="sd">    first-oder autoregressive model (constant velocity) for a 2D point </span>
+<span class="sd">    (see ``arm01ConstVelFun()``). The estimated state is a weighted average </span>
+<span class="sd">    between xNextFromWeights and the last estimated state.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------    </span>
+<span class="sd">    xEst : np.ndarray (nS x nI)</span>
+<span class="sd">        See xEst.</span>
+<span class="sd">    </span>
+<span class="sd">    xFromWeights : np.ndarray (nS).</span>
+<span class="sd">        See xNextFromWeights.</span>
+<span class="sd">        </span>
+<span class="sd">    pars : dict</span>
+<span class="sd">        Dictionary of parameters. It must contain the following keys:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;alfaLearnPos&#39;: 2-elem vector containing weights for the position </span>
+<span class="sd">          part (x and y) of xNextFromWeights.</span>
+<span class="sd">          </span>
+<span class="sd">        - &#39;alfaLearnVel&#39;: 2-elem vector containing weights for the velocity </span>
+<span class="sd">          part (x and y) of xNextFromWeights.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray (nS)</span>
+<span class="sd">        See xNextEst.</span>
+<span class="sd">        </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># Adaptive state estimate equation for first-oder autoregressive model (constant velocity)</span>
+    <span class="n">xNextEst</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">4</span><span class="p">,))</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="mf">1.</span>
+    <span class="n">alfaLearnPos</span> <span class="o">=</span> <span class="n">pars</span><span class="p">[</span><span class="s">&#39;alfaLearnPos&#39;</span><span class="p">]</span>
+    <span class="n">alfaLearnVel</span> <span class="o">=</span> <span class="n">pars</span><span class="p">[</span><span class="s">&#39;alfaLearnVel&#39;</span><span class="p">]</span>
+    <span class="n">xNextEst</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">alfaLearnPos</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">xEst</span><span class="p">[:</span><span class="mi">2</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">xEst</span><span class="p">[</span><span class="mi">2</span><span class="p">:,</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">*</span><span class="n">dt</span><span class="p">)</span> <span class="o">+</span> <span class="n">alfaLearnPos</span> <span class="o">*</span> <span class="n">xFromWeights</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+    <span class="n">xNextEst</span><span class="p">[</span><span class="mi">2</span><span class="p">:]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">alfaLearnVel</span><span class="p">)</span> <span class="o">*</span> <span class="n">xEst</span><span class="p">[</span><span class="mi">2</span><span class="p">:,</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">alfaLearnVel</span> <span class="o">*</span> <span class="p">(</span><span class="n">xNextEst</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="n">xEst</span><span class="p">[:</span><span class="mi">2</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">/</span> <span class="n">dt</span>
+    <span class="k">return</span> <span class="n">xNextEst</span>
+    
+</div>
+<div class="viewcode-block" id="bhattDistObsFun"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.bhattDistObsFun">[docs]</a><span class="k">def</span> <span class="nf">bhattDistObsFun</span><span class="p">(</span><span class="n">xNext</span><span class="p">,</span> <span class="n">xEst</span><span class="p">,</span> <span class="n">w</span><span class="p">,</span> <span class="n">addData</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Implement a Bhattacharyya distance-based observation model for image</span>
+<span class="sd">    tracking.</span>
+<span class="sd">    The probability distribution is modelled as a Gaussian distribution of the</span>
+<span class="sd">    Bhattacharyya histogram distance between a target patch and patches centered </span>
+<span class="sd">    around the positional part of particles.</span>
+<span class="sd">    The first 2 state variables must be x and y position of the patch center</span>
+<span class="sd">    under tracking.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------    </span>
+<span class="sd">    xNext : np.ndarray (nS x nP)</span>
+<span class="sd">        See xNext.    </span>
+<span class="sd">    </span>
+<span class="sd">    xEst : np.ndarray (nS x nI)</span>
+<span class="sd">        See xEst.</span>
+<span class="sd">    </span>
+<span class="sd">    w : np.ndarray (nS).</span>
+<span class="sd">        See w.</span>
+<span class="sd">        </span>
+<span class="sd">    addData : dict</span>
+<span class="sd">        See addData.</span>
+<span class="sd">        It must contain the key &#39;otherPars&#39; containing the following keys:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;nBins&#39;: number of histogram bins for Bhattacharyya distance calculation.</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;sigmaBhatta&#39;: sigma for Gaussian distance distribution.</span>
+<span class="sd">        </span>
+<span class="sd">        It must contain the following keys:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;I&#39;: current image (only needed if posManuallySet is True or nI is 1)</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;boxSize&#39;: tuple containing image size (width, height)</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;posManuallySet&#39;: flag indicating if the target position is manually</span>
+<span class="sd">          set for the current iteration.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray (nS)</span>
+<span class="sd">        See wNext.</span>
+<span class="sd">        </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># Classical Bhattacharyya distance-based observation model</span>
+    <span class="n">nParticles</span> <span class="o">=</span> <span class="n">xNext</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">B</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nParticles</span><span class="p">,))</span>
+    <span class="c"># Get additional data</span>
+    <span class="n">I</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;I&#39;</span><span class="p">]</span>      <span class="c"># current image</span>
+    <span class="n">w</span><span class="p">,</span> <span class="n">h</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;boxSize&#39;</span><span class="p">]</span>   <span class="c"># box size</span>
+    <span class="n">posManuallySet</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;posManuallySet&#39;</span><span class="p">]</span>
+    <span class="n">otherPars</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;otherPars&#39;</span><span class="p">]</span>
+    <span class="n">nBins</span> <span class="o">=</span> <span class="n">otherPars</span><span class="p">[</span><span class="s">&#39;nBins&#39;</span><span class="p">]</span>
+    <span class="n">sigmaBhatta</span> <span class="o">=</span> <span class="n">otherPars</span><span class="p">[</span><span class="s">&#39;sigmaBhatta&#39;</span><span class="p">]</span>
+    <span class="c"># Get/calculate target histogram</span>
+    <span class="k">if</span> <span class="n">posManuallySet</span> <span class="ow">or</span> <span class="n">xEst</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="n">xEst</span><span class="p">[:</span><span class="mi">2</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">T</span> <span class="o">=</span> <span class="n">I</span><span class="p">[</span><span class="n">c</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="p">(</span><span class="n">h</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">:</span><span class="n">c</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="p">(</span><span class="n">h</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">,</span> <span class="n">c</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span><span class="p">(</span><span class="n">w</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">:</span><span class="n">c</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">+</span><span class="p">(</span><span class="n">w</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">Thist</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">calcHist</span><span class="p">([</span><span class="n">T</span><span class="p">],[</span><span class="mi">0</span><span class="p">],</span><span class="bp">None</span><span class="p">,[</span><span class="n">nBins</span><span class="p">],[</span><span class="mi">0</span><span class="p">,</span><span class="mi">256</span><span class="p">])</span>
+        <span class="n">addData</span><span class="p">[</span><span class="s">&#39;Thist&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Thist</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">Thist</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;Thist&#39;</span><span class="p">]</span>
+    <span class="c"># Calculate particle weights</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">nParticles</span><span class="p">):</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="n">xNext</span><span class="p">[:</span><span class="mi">2</span><span class="p">,</span><span class="n">i</span><span class="p">]</span>
+        <span class="n">O</span> <span class="o">=</span> <span class="n">I</span><span class="p">[</span><span class="n">c</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="p">(</span><span class="n">h</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">:</span><span class="n">c</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="p">(</span><span class="n">h</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">,</span> <span class="n">c</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span><span class="p">(</span><span class="n">w</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">:</span><span class="n">c</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">+</span><span class="p">(</span><span class="n">w</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">Ohist</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">calcHist</span><span class="p">([</span><span class="n">O</span><span class="p">],[</span><span class="mi">0</span><span class="p">],</span><span class="bp">None</span><span class="p">,[</span><span class="n">nBins</span><span class="p">],[</span><span class="mi">0</span><span class="p">,</span><span class="mi">256</span><span class="p">])</span>    <span class="c"># histogram around particle &#39;i&#39;</span>
+        <span class="n">C</span> <span class="o">=</span> <span class="n">histogramsSimilarity</span><span class="p">(</span><span class="n">Thist</span><span class="p">,</span> <span class="n">Ohist</span><span class="p">,</span> <span class="n">meas</span><span class="o">=</span><span class="s">&#39;bhattacharyya_coef&#39;</span><span class="p">)</span>
+        <span class="n">B</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">C</span><span class="p">)</span><span class="o">**</span><span class="mf">0.5</span>
+    <span class="n">wNext</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span> <span class="n">B</span><span class="o">**</span><span class="mi">2</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">sigmaBhatta</span><span class="o">**</span><span class="mi">2</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">wNext</span>
+    
+    </div>
+<div class="viewcode-block" id="RNCCObsFun"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.RNCCObsFun">[docs]</a><span class="k">def</span> <span class="nf">RNCCObsFun</span><span class="p">(</span><span class="n">xNext</span><span class="p">,</span> <span class="n">xEst</span><span class="p">,</span> <span class="n">w</span><span class="p">,</span> <span class="n">addData</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Implement a rectified NCC-based observation model for image tracking. </span>
+<span class="sd">    Rectified NCC (RNCC) is the same as NCC, but truncated to 0 when NCC is </span>
+<span class="sd">    lower than 0.</span>
+<span class="sd">    The probability distribution is directly expressed as the RNCC value</span>
+<span class="sd">    (0 &lt;= RNCC &lt;= 1) between a target patch and patches centered around the </span>
+<span class="sd">    positional part of particles.</span>
+<span class="sd">    The first 2 state variables must be x and y position of the patch center</span>
+<span class="sd">    under tracking.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------    </span>
+<span class="sd">    xNext : np.ndarray (nS x nP)</span>
+<span class="sd">        See xNext.    </span>
+<span class="sd">    </span>
+<span class="sd">    xEst : np.ndarray (nS x nI)</span>
+<span class="sd">        See xEst.</span>
+<span class="sd">    </span>
+<span class="sd">    w : np.ndarray (nS).</span>
+<span class="sd">        See w.</span>
+<span class="sd">        </span>
+<span class="sd">    addData : dict</span>
+<span class="sd">        See addData.</span>
+<span class="sd">        It may contain the key &#39;otherPars&#39; containing the following keys:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;verbose&#39;: if True, more data is shown during computation.</span>
+<span class="sd">            </span>
+<span class="sd">        It must contain the following keys:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;I&#39;: current image (only needed if posManuallySet is True or nI is 1)</span>
+<span class="sd">            </span>
+<span class="sd">        - &#39;boxSize&#39;: tuple containing image size (width, height)</span>
+<span class="sd">            </span>
+<span class="sd">        - &#39;posManuallySet&#39;: flag indicating if the target position is manually</span>
+<span class="sd">          set for the current iteration.</span>
+<span class="sd">            </span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray (nS)</span>
+<span class="sd">        See wNext.</span>
+<span class="sd">        </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># Classical Bhattacharyya distance-based observation model</span>
+    <span class="n">nParticles</span> <span class="o">=</span> <span class="n">xNext</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">wNext</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">nParticles</span><span class="p">,))</span>
+    <span class="c"># Get additional data</span>
+    <span class="n">I</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;I&#39;</span><span class="p">]</span>      <span class="c"># current image</span>
+    <span class="n">w</span><span class="p">,</span> <span class="n">h</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;boxSize&#39;</span><span class="p">]</span>   <span class="c"># box size</span>
+    <span class="n">posManuallySet</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;posManuallySet&#39;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="s">&#39;otherPars&#39;</span> <span class="ow">in</span> <span class="n">addData</span><span class="p">:</span>
+        <span class="n">otherPars</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;otherPars&#39;</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">otherPars</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">if</span> <span class="s">&#39;targetMask&#39;</span> <span class="ow">in</span> <span class="n">otherPars</span><span class="p">:</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">otherPars</span><span class="p">[</span><span class="s">&#39;targetMask&#39;</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="n">h</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="n">w</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s">&#39;obsFunVerbose&#39;</span> <span class="ow">in</span> <span class="n">otherPars</span><span class="p">:</span>
+        <span class="n">verbose</span> <span class="o">=</span> <span class="n">otherPars</span><span class="p">[</span><span class="s">&#39;obsFunVerbose&#39;</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">verbose</span> <span class="o">=</span> <span class="bp">False</span>  
+    <span class="c"># Get/calculate target histogram</span>
+    <span class="k">if</span> <span class="n">posManuallySet</span> <span class="ow">or</span> <span class="n">xEst</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="n">xEst</span><span class="p">[:</span><span class="mi">2</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">T</span> <span class="o">=</span> <span class="n">I</span><span class="p">[</span><span class="n">c</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="p">(</span><span class="n">h</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">:</span><span class="n">c</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="p">(</span><span class="n">h</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">,</span> <span class="n">c</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span><span class="p">(</span><span class="n">w</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">:</span><span class="n">c</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">+</span><span class="p">(</span><span class="n">w</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">addData</span><span class="p">[</span><span class="s">&#39;T&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">T</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">T</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;T&#39;</span><span class="p">]</span>
+    <span class="c">#plt.imshow(T)</span>
+    <span class="c">#plt.show()</span>
+    <span class="c"># Calculate particle weights</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">nParticles</span><span class="p">):</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="n">xNext</span><span class="p">[:</span><span class="mi">2</span><span class="p">,</span><span class="n">i</span><span class="p">]</span>
+        <span class="n">O</span> <span class="o">=</span> <span class="n">I</span><span class="p">[</span><span class="n">c</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="p">(</span><span class="n">h</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">:</span><span class="n">c</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="p">(</span><span class="n">h</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">,</span> <span class="n">c</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span><span class="p">(</span><span class="n">w</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">:</span><span class="n">c</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">+</span><span class="p">(</span><span class="n">w</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">O</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">T</span><span class="o">.</span><span class="n">shape</span><span class="p">):</span>
+            <span class="n">wNext</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">NCC</span><span class="p">(</span><span class="n">O</span><span class="p">[</span><span class="n">mask</span><span class="o">==</span><span class="bp">True</span><span class="p">],</span><span class="n">T</span><span class="p">[</span><span class="n">mask</span><span class="o">==</span><span class="bp">True</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>  
+                <span class="c"># Plot most important particles</span>
+                <span class="k">if</span> <span class="n">wNext</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.9</span><span class="p">:</span>
+                    <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">221</span><span class="p">)</span>
+                    <span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">O</span><span class="o">*</span><span class="n">mask</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">plt</span><span class="o">.</span><span class="n">cm</span><span class="o">.</span><span class="n">gray</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="mi">255</span><span class="p">)</span>
+                    <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">&#39;Particle </span><span class="si">%d</span><span class="s">: </span><span class="si">%f</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span><span class="n">wNext</span><span class="p">[</span><span class="n">i</span><span class="p">]))</span>
+                    <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">222</span><span class="p">)</span>
+                    <span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">I</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">plt</span><span class="o">.</span><span class="n">cm</span><span class="o">.</span><span class="n">gray</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="mi">255</span><span class="p">)</span>
+                    <span class="n">plt</span><span class="o">.</span><span class="n">hold</span><span class="p">(</span><span class="bp">True</span><span class="p">)</span>
+                    <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">c</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">c</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">&#39;o&#39;</span><span class="p">,</span> <span class="n">mfc</span><span class="o">=</span><span class="s">&#39;none&#39;</span><span class="p">,</span> <span class="n">mec</span><span class="o">=</span><span class="s">&#39;r&#39;</span><span class="p">,</span> <span class="n">scalex</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">scaley</span><span class="o">=</span><span class="bp">False</span><span class="p">)</span>
+                    <span class="n">plt</span><span class="o">.</span><span class="n">subplot</span><span class="p">(</span><span class="mi">223</span><span class="p">)</span>
+                    <span class="n">plt</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">T</span><span class="o">*</span><span class="n">mask</span><span class="p">,</span> <span class="n">cmap</span><span class="o">=</span><span class="n">plt</span><span class="o">.</span><span class="n">cm</span><span class="o">.</span><span class="n">gray</span><span class="p">,</span> <span class="n">vmin</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="mi">255</span><span class="p">)</span>
+                    <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">wNext</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">wNext</span><span class="p">[</span><span class="n">wNext</span><span class="o">&lt;</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">return</span> <span class="n">wNext</span>
+    
+</div>
+<div class="viewcode-block" id="adaptiveHistEstFun"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.adaptiveHistEstFun">[docs]</a><span class="k">def</span> <span class="nf">adaptiveHistEstFun</span><span class="p">(</span><span class="n">xEst</span><span class="p">,</span> <span class="n">xNext</span><span class="p">,</span> <span class="n">wNextNorm</span><span class="p">,</span> <span class="n">xNextFromWeights</span><span class="p">,</span> <span class="n">addData</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Use a-posteriori probability model described in ``arm01ConstVelEstFun()``</span>
+<span class="sd">    and perform target template histogram update with a certain learning rate, </span>
+<span class="sd">    for image tracking purpose. This function has to be used in combination with</span>
+<span class="sd">    any histogram-distance-based observation model (e.g. ``bhattDistObsFun()``).</span>
+<span class="sd">    The first 2 state variables must be x and y position of the patch center</span>
+<span class="sd">    under tracking.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------    </span>
+<span class="sd">    xEst : np.ndarray (nS x nI)</span>
+<span class="sd">        See xEst.</span>
+<span class="sd">        </span>
+<span class="sd">    xNext : np.ndarray (nS x nP)</span>
+<span class="sd">        See xNext.</span>
+<span class="sd">        </span>
+<span class="sd">    wNextNorm : np.ndarray (nP)</span>
+<span class="sd">        See wNextNorm.</span>
+<span class="sd">    </span>
+<span class="sd">    xNextFromWeights : np.ndarray (nS).</span>
+<span class="sd">        See xNextFromWeights.</span>
+<span class="sd">        </span>
+<span class="sd">    addData : dict</span>
+<span class="sd">        See addData.</span>
+<span class="sd">        It must contain the key &#39;otherPars&#39; containing the following keys:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;alfaLearnHist&#39;: learning rate for target template.</span>
+<span class="sd">        </span>
+<span class="sd">        - keys required by ``arm01ConstVelEstFun()``.</span>
+<span class="sd">        </span>
+<span class="sd">        It must contain the following keys:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;I&#39;: current image (only needed if posManuallySet is True)</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;boxSize&#39;: tuple containing image size (width, height)</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;posManuallySet&#39;: flag indicating if the target position is manually</span>
+<span class="sd">          set for the current iteration.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray (nS)</span>
+<span class="sd">        See xNextEst.</span>
+<span class="sd">        </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># Get additional data</span>
+    <span class="n">I</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;I&#39;</span><span class="p">]</span>      <span class="c"># current image</span>
+    <span class="n">w</span><span class="p">,</span> <span class="n">h</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;boxSize&#39;</span><span class="p">]</span>   <span class="c"># box size</span>
+    <span class="n">posManuallySet</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;posManuallySet&#39;</span><span class="p">]</span>
+    <span class="n">otherPars</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;otherPars&#39;</span><span class="p">]</span>
+    <span class="n">nBins</span> <span class="o">=</span> <span class="n">otherPars</span><span class="p">[</span><span class="s">&#39;nBins&#39;</span><span class="p">]</span>
+    <span class="n">alfaLearnHist</span> <span class="o">=</span> <span class="n">otherPars</span><span class="p">[</span><span class="s">&#39;alfaLearnHist&#39;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">posManuallySet</span><span class="p">:</span>
+        <span class="c"># Set non-positional state values</span>
+        <span class="k">pass</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c"># Update state</span>
+        <span class="n">xNextEst</span> <span class="o">=</span> <span class="n">arm01ConstVelEstFun</span><span class="p">(</span><span class="n">xEst</span><span class="p">,</span> <span class="n">xNextFromWeights</span><span class="p">,</span> <span class="n">otherPars</span><span class="p">)</span>
+        <span class="c"># Update target histogram</span>
+        <span class="n">Thist</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;Thist&#39;</span><span class="p">]</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="n">xNextFromWeights</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+        <span class="c">#c = xNextEst[:2]</span>
+        <span class="n">O</span> <span class="o">=</span> <span class="n">I</span><span class="p">[</span><span class="n">c</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="p">(</span><span class="n">h</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">:</span><span class="n">c</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="p">(</span><span class="n">h</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">,</span> <span class="n">c</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span><span class="p">(</span><span class="n">w</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">:</span><span class="n">c</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">+</span><span class="p">(</span><span class="n">w</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">Ohist</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">calcHist</span><span class="p">([</span><span class="n">O</span><span class="p">],[</span><span class="mi">0</span><span class="p">],</span><span class="bp">None</span><span class="p">,[</span><span class="n">nBins</span><span class="p">],[</span><span class="mi">0</span><span class="p">,</span><span class="mi">256</span><span class="p">])</span>
+        <span class="n">Thist</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">alfaLearnHist</span><span class="p">)</span> <span class="o">*</span> <span class="n">Thist</span> <span class="o">+</span> <span class="n">alfaLearnHist</span> <span class="o">*</span> <span class="n">Ohist</span>
+        <span class="n">addData</span><span class="p">[</span><span class="s">&#39;Thist&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Thist</span>
+    <span class="c"># Return estimated state</span>
+    <span class="k">return</span> <span class="n">xNextEst</span>
+    
+    </div>
+<div class="viewcode-block" id="adaptiveTemplateEstFun"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.adaptiveTemplateEstFun">[docs]</a><span class="k">def</span> <span class="nf">adaptiveTemplateEstFun</span><span class="p">(</span><span class="n">xEst</span><span class="p">,</span> <span class="n">xNext</span><span class="p">,</span> <span class="n">wNextNorm</span><span class="p">,</span> <span class="n">xNextFromWeights</span><span class="p">,</span> <span class="n">addData</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Use a-posteriori probability model described in ``arm01ConstVelEstFun()``</span>
+<span class="sd">    and perform target template update with a certain learning rate, for image </span>
+<span class="sd">    tracking purpose. This function has to be used in combination with any </span>
+<span class="sd">    template-match-based observation model (e.g. ``RNCCObsFun()``).</span>
+<span class="sd">    The first 2 state variables must be x and y position of the patch center</span>
+<span class="sd">    under tracking.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------    </span>
+<span class="sd">    xEst : np.ndarray (nS x nI)</span>
+<span class="sd">        See xEst.</span>
+<span class="sd">        </span>
+<span class="sd">    xNext : np.ndarray (nS x nP)</span>
+<span class="sd">        See xNext.</span>
+<span class="sd">        </span>
+<span class="sd">    wNextNorm : np.ndarray (nP)</span>
+<span class="sd">        See wNextNorm.</span>
+<span class="sd">    </span>
+<span class="sd">    xNextFromWeights : np.ndarray (nS).</span>
+<span class="sd">        See xNextFromWeights.</span>
+<span class="sd">        </span>
+<span class="sd">    addData : dict</span>
+<span class="sd">        See addData.</span>
+<span class="sd">        It must contain the key &#39;otherPars&#39; containing the following keys:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;alfaLearnTemplate&#39;: learning rate for target template.</span>
+<span class="sd">        </span>
+<span class="sd">        - keys required by ``arm01ConstVelEstFun()``.</span>
+<span class="sd">        </span>
+<span class="sd">        It must contain the following keys:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;I&#39;: current image (only needed if posManuallySet is True)</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;boxSize&#39;: tuple containing image size (width, height)</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;posManuallySet&#39;: flag indicating if the target position is manually</span>
+<span class="sd">          set for the current iteration.</span>
+<span class="sd">        </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray (nS)</span>
+<span class="sd">        See xNextEst.</span>
+<span class="sd">        </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># Get additional data</span>
+    <span class="n">I</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;I&#39;</span><span class="p">]</span>      <span class="c"># current image</span>
+    <span class="n">w</span><span class="p">,</span> <span class="n">h</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;boxSize&#39;</span><span class="p">]</span>   <span class="c"># box size</span>
+    <span class="n">posManuallySet</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;posManuallySet&#39;</span><span class="p">]</span>
+    <span class="n">otherPars</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;otherPars&#39;</span><span class="p">]</span>
+    <span class="n">alfaLearnTemplate</span> <span class="o">=</span> <span class="n">otherPars</span><span class="p">[</span><span class="s">&#39;alfaLearnTemplate&#39;</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">posManuallySet</span><span class="p">:</span>
+        <span class="c"># Set non-positional state values</span>
+        <span class="k">pass</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c"># Update state</span>
+        <span class="n">xNextEst</span> <span class="o">=</span> <span class="n">arm01ConstVelEstFun</span><span class="p">(</span><span class="n">xEst</span><span class="p">,</span> <span class="n">xNextFromWeights</span><span class="p">,</span> <span class="n">otherPars</span><span class="p">)</span>
+        <span class="c"># Update template histogram</span>
+        <span class="n">T</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;T&#39;</span><span class="p">]</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="n">xNextFromWeights</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+        <span class="c">#c = xNextEst[:2]</span>
+        <span class="n">O</span> <span class="o">=</span> <span class="n">I</span><span class="p">[</span><span class="n">c</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="p">(</span><span class="n">h</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">:</span><span class="n">c</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="p">(</span><span class="n">h</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">,</span> <span class="n">c</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span><span class="p">(</span><span class="n">w</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">:</span><span class="n">c</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">+</span><span class="p">(</span><span class="n">w</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">T</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">alfaLearnTemplate</span><span class="p">)</span> <span class="o">*</span> <span class="n">T</span> <span class="o">+</span> <span class="n">alfaLearnTemplate</span> <span class="o">*</span> <span class="n">O</span>
+        <span class="n">addData</span><span class="p">[</span><span class="s">&#39;T&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">T</span>
+    <span class="c"># Return estimated state</span>
+    <span class="k">return</span> <span class="n">xNextEst</span>
+    
+    </div>
+<div class="viewcode-block" id="initRandParticlesInBoxFun"><a class="viewcode-back" href="../../api/api.html#Py3DFreeHandUS.particle_filter.initRandParticlesInBoxFun">[docs]</a><span class="k">def</span> <span class="nf">initRandParticlesInBoxFun</span><span class="p">(</span><span class="n">nParticles</span><span class="p">,</span> <span class="n">xEst</span><span class="p">,</span> <span class="n">addData</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Create particles inside a bounded box in case bounding box center is</span>
+<span class="sd">    given manually or there are no estimated states yet.</span>
+<span class="sd">    The first 2 state variables must be x and y position of the box point.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------    </span>
+<span class="sd">    nParticles : int</span>
+<span class="sd">        Number of particles to create.</span>
+<span class="sd">        </span>
+<span class="sd">    xEst : np.ndarray (nS x nI)</span>
+<span class="sd">        See xEst.</span>
+<span class="sd">        </span>
+<span class="sd">    addData : dict</span>
+<span class="sd">        See addData.</span>
+<span class="sd">        It must contain the following keys:</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;boxSize&#39;: tuple containing image size (width, height)</span>
+<span class="sd">        </span>
+<span class="sd">        - &#39;posManuallySet&#39;: flag indicating if the position position is manually</span>
+<span class="sd">          set for the current iteration.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------        </span>
+<span class="sd">    xParticles : np.ndarray (nS x nP)</span>
+<span class="sd">        See x. Velocity components are set to 0.</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># Create random particles all contained inside a box</span>
+    <span class="n">w</span><span class="p">,</span> <span class="n">h</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;boxSize&#39;</span><span class="p">]</span>
+    <span class="n">posManuallySet</span> <span class="o">=</span> <span class="n">addData</span><span class="p">[</span><span class="s">&#39;posManuallySet&#39;</span><span class="p">]</span>
+    <span class="n">cx</span><span class="p">,</span> <span class="n">cy</span> <span class="o">=</span> <span class="n">xEst</span><span class="p">[:</span><span class="mi">2</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">posManuallySet</span> <span class="ow">or</span> <span class="n">xEst</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">xParticles</span> <span class="o">=</span> <span class="n">createRandomInMaskCoords</span><span class="p">(</span><span class="n">cx</span><span class="p">,</span> <span class="n">cy</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">w</span><span class="p">,</span> <span class="n">nParticles</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+        <span class="n">vel</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span><span class="n">nParticles</span><span class="p">))</span>
+        <span class="n">xParticles</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">((</span><span class="n">xParticles</span><span class="p">,</span> <span class="n">vel</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">xParticles</span>
+    
+    
+    
+    
+    </div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">Py3DFreeHandUS 1.0 documentation</a> &raquo;</li>
+          <li><a href="../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2015, Davide Monari.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.3.
+    </div>
+  </body>
+</html>

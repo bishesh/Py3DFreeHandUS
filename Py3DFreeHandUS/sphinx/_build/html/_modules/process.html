@@ -1,0 +1,1207 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>process &mdash; Py3DFreeHandUS 1.0 documentation</title>
+    
+    <link rel="stylesheet" href="../_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../',
+        VERSION:     '1.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../_static/jquery.js"></script>
+    <script type="text/javascript" src="../_static/underscore.js"></script>
+    <script type="text/javascript" src="../_static/doctools.js"></script>
+    <link rel="top" title="Py3DFreeHandUS 1.0 documentation" href="../index.html" />
+    <link rel="up" title="Module code" href="index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../index.html">Py3DFreeHandUS 1.0 documentation</a> &raquo;</li>
+          <li><a href="index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for process</h1><div class="highlight"><pre>
+<span class="c"># -*- coding: utf-8 -*-</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Created on Wed Feb 12 15:04:13 2014</span>
+
+<span class="sd">@author: dmonar0</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c"># Modules importation</span>
+<span class="kn">import</span> <span class="nn">btk</span>
+<span class="kn">from</span> <span class="nn">kine</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">voxel_array_utils</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">image_utils</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">segment</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">calib</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">scipy</span> <span class="kn">import</span> <span class="n">ndimage</span> <span class="k">as</span> <span class="n">nd</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">vtk</span>
+<span class="kn">import</span> <span class="nn">pickle</span>
+
+
+
+<span class="k">def</span> <span class="nf">checkOdd</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">n</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">&lt;&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">True</span>
+    <span class="k">return</span> <span class="bp">False</span>
+    
+<span class="k">def</span> <span class="nf">checkInt</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">n</span><span class="p">)</span><span class="o">-</span><span class="n">n</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">True</span>
+    <span class="k">return</span> <span class="bp">False</span>
+
+<span class="k">def</span> <span class="nf">checkFreq</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">f</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Acquisition frequency was not defined&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">checkInt</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="ow">or</span> <span class="n">f</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Acquisition frequency must be integer and positive&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkFreqRatio</span><span class="p">(</span><span class="n">f1</span><span class="p">,</span> <span class="n">f2</span><span class="p">):</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">checkInt</span><span class="p">(</span><span class="n">f2</span><span class="o">/</span><span class="n">f1</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">checkInt</span><span class="p">(</span><span class="n">f2</span><span class="o">/</span><span class="n">f1</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Frequencies ratio must be integer&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkMkrList</span><span class="p">(</span><span class="n">mkrList</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">mkrList</span><span class="p">))</span> <span class="o">&lt;</span> <span class="mi">4</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;There must be at least 4 markers&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkKineFile</span><span class="p">(</span><span class="n">kineFile</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">kineFile</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Kinematics file not set&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkUsFiles</span><span class="p">(</span><span class="n">usFiles</span><span class="p">,</span> <span class="n">L</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">usFiles</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;US files were not set&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">L</span> <span class="o">&lt;&gt;</span> <span class="bp">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">usFiles</span><span class="p">)</span> <span class="o">&lt;&gt;</span> <span class="n">L</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Number of US files must be {0}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">L</span><span class="p">))</span>
+
+<span class="k">def</span> <span class="nf">checkTimeWin</span><span class="p">(</span><span class="n">timeWin</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">timeWin</span> <span class="o">&lt;&gt;</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">timeWin</span><span class="p">)</span> <span class="o">&lt;&gt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Time window must contain 2 values&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">timeWin</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">checkInt</span><span class="p">(</span><span class="n">timeWin</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;First time window value must be integer and positive or zero&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">timeWin</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">checkInt</span><span class="p">(</span><span class="n">timeWin</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Second time window value must be integer and positive or zero&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkIm2PrPose</span><span class="p">(</span><span class="n">prRim</span><span class="p">,</span> <span class="n">Tim</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">prRim</span> <span class="o">==</span> <span class="bp">None</span> <span class="ow">or</span> <span class="n">Tim</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+         <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;US probe calibration was not performed&#39;</span><span class="p">)</span>        
+    
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">prRim</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">&lt;&gt;</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">prRim</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;&gt;</span> <span class="mi">3</span> <span class="ow">or</span> <span class="n">prRim</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;&gt;</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;US image-to-probe rotation matrix must be a 3 x 3 matrix&#39;</span><span class="p">)</span>
+    
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">Tim</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">&lt;&gt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">Tim</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;&gt;</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;US image-to-probe position vector must be a 3 elements vector&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkPr2GlPose</span><span class="p">(</span><span class="n">Rpr</span><span class="p">,</span> <span class="n">Tpr</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">Rpr</span> <span class="o">==</span> <span class="bp">None</span> <span class="ow">or</span> <span class="n">Tpr</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+         <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;US probe pose computation was not performed&#39;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">Rpr</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">&lt;&gt;</span> <span class="mi">3</span> <span class="ow">or</span> <span class="n">Rpr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;&gt;</span> <span class="mi">3</span> <span class="ow">or</span> <span class="n">Rpr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">&lt;&gt;</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Probe-to-global rotation matrix must be a N x 3 x 3 matrix&#39;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">Tpr</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">&lt;&gt;</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">Tpr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;&gt;</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Probe-to-global position vector must be a N x 3 matrix&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkIm2GlPose</span><span class="p">(</span><span class="n">R</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">R</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Pose for US images was not calculated&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkFeature</span><span class="p">(</span><span class="n">feature</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">feature</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;2_points_on_line&#39;</span><span class="p">,</span> <span class="s">&#39;1_point&#39;</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Feature not supported&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkSegmentation</span><span class="p">(</span><span class="n">segmentation</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">segmentation</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;manual&#39;</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Segmentation not supported&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkPhantom</span><span class="p">(</span><span class="n">phantom</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">phantom</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;single_wall&#39;</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Phantom not supported&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkFeatures</span><span class="p">(</span><span class="n">features</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">features</span> <span class="o">==</span> <span class="bp">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">features</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Features from US images were not extracted&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkImDim</span><span class="p">(</span><span class="n">d</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">d</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;At least one US image dimensions was not set&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">checkInt</span><span class="p">(</span><span class="n">d</span><span class="p">)</span> <span class="ow">or</span> <span class="n">d</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;US image dimensions must be integer and positive&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkPixel2mm</span><span class="p">(</span><span class="n">pixel2mm</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">pixel2mm</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;US image pixel-to-mm ratio was not set&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">pixel2mm</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;US image pixel-to-mm ratio must be positive&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkFxyz</span><span class="p">(</span><span class="n">fxyz</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">fxyz</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Voxel array scaling factors were not set&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">fxyz</span><span class="p">)</span> <span class="o">&lt;&gt;</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Voxel array scaling factors must be exactly 3&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">3</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">fxyz</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;All voxel array scaling factors must be positive&#39;</span><span class="p">)</span>  
+
+<span class="k">def</span> <span class="nf">checkWrapper</span><span class="p">(</span><span class="n">wrapper</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">wrapper</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Wrapping method was not set&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">wrapper</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;parallelepipedon&#39;</span><span class="p">,</span> <span class="s">&#39;convex_hull&#39;</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Wrapping method not supported&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkStep</span><span class="p">(</span><span class="n">step</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">step</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Wrapping creation step was not set&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">checkInt</span><span class="p">(</span><span class="n">step</span><span class="p">)</span> <span class="ow">or</span> <span class="n">step</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Wrapping creation step must be integer and positive&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkV</span><span class="p">(</span><span class="n">V</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">V</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Voxel array initialization was not performed&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkMethod</span><span class="p">(</span><span class="n">method</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Gaps filling method was not set&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">method</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;VNN&#39;</span><span class="p">,</span> <span class="s">&#39;AVG_CUBE&#39;</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Gaps filling method not supported&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkBlocksN</span><span class="p">(</span><span class="n">blocksN</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">blocksN</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Blocks number was not set&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">checkInt</span><span class="p">(</span><span class="n">blocksN</span><span class="p">)</span> <span class="ow">or</span> <span class="n">blocksN</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Blocks number must be integer and positive or zero&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkMaxS</span><span class="p">(</span><span class="n">maxS</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">maxS</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Max search cube side was not set&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">checkInt</span><span class="p">(</span><span class="n">maxS</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">checkOdd</span><span class="p">(</span><span class="n">maxS</span><span class="p">)</span> <span class="ow">or</span> <span class="n">maxS</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Max search cube side must be integer, positive and odd&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkMinPct</span><span class="p">(</span><span class="n">minPct</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">minPct</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Acceptability percentage was not set&#39;</span><span class="p">)</span>            
+    <span class="k">if</span> <span class="n">minPct</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Acceptability percentage must be positive or zero&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkSxyz</span><span class="p">(</span><span class="n">sxyz</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">sxyz</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;vtkImageData spacing factors were not set&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sxyz</span><span class="p">)</span> <span class="o">&lt;&gt;</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;vtkImageData spacing factors must be exactly 3&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">3</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">sxyz</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;All vtkImageData spacing factors must be positive&#39;</span><span class="p">)</span>
+            
+<span class="k">def</span> <span class="nf">checkFilePath</span><span class="p">(</span><span class="n">p</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">p</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;File path was not set&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;File path cannot be empty&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkPrecType</span><span class="p">(</span><span class="n">p</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">p</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Precision type was not set&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">p</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;RP&#39;</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Precision type not supported&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkAccType</span><span class="p">(</span><span class="n">a</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">a</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Accuracy type was not set&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">a</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;DA&#39;</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Accuracy type not supported&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkDist</span><span class="p">(</span><span class="n">d</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">d</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Distance was not set&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">checkInt</span><span class="p">(</span><span class="n">step</span><span class="p">)</span> <span class="ow">or</span> <span class="n">step</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Distance must be integer and positive&#39;</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">checkTimeVector</span><span class="p">(</span><span class="n">t</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">t</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Time vector was not set&#39;</span><span class="p">)</span>    
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">t</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Time vector cannot be empty&#39;</span><span class="p">)</span> 
+    <span class="k">if</span> <span class="n">t</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;First time element must be 0&#39;</span><span class="p">)</span> 
+
+
+<span class="k">def</span> <span class="nf">setInsideRange</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">bound</span><span class="p">,</span> <span class="n">stepBase</span><span class="p">):</span>
+    <span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">v</span> <span class="o">&lt;=</span> <span class="n">bound</span> <span class="ow">and</span> <span class="n">v</span> <span class="o">&gt;=</span> <span class="o">-</span><span class="n">bound</span><span class="p">:</span>
+            <span class="k">break</span>
+        <span class="n">step</span> <span class="o">=</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">*</span> <span class="n">stepBase</span>
+        <span class="n">v</span> <span class="o">+=</span> <span class="n">step</span>
+    <span class="k">return</span> <span class="n">v</span>
+        
+
+<span class="c"># Process class</span>
+
+
+<div class="viewcode-block" id="Process"><a class="viewcode-back" href="../index.html#process.Process">[docs]</a><span class="k">class</span> <span class="nc">Process</span><span class="p">:</span>
+      
+    
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+        <span class="c"># Data source files</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kineFile</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">usFiles</span> <span class="o">=</span> <span class="bp">None</span>
+        
+        <span class="c"># US images parameters</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">w</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">h</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmX</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmY</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">usFreq</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">usTimeVector</span> <span class="o">=</span> <span class="bp">None</span>
+        
+        <span class="c"># Kinematics file properties</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kineFreq</span> <span class="o">=</span> <span class="bp">None</span>
+        
+        <span class="c"># US probe-to-lab attitube</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">Rpr</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">Tpr</span> <span class="o">=</span> <span class="bp">None</span>
+        
+        <span class="c"># Image-to-US probe attitude</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prRim</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">Tim</span> <span class="o">=</span> <span class="bp">None</span>
+        
+        <span class="c"># Calibration results</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">calib</span> <span class="o">=</span> <span class="bp">None</span>
+        
+        <span class="c"># Image-to-lab attitude</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">R</span> <span class="o">=</span> <span class="bp">None</span>
+        
+        <span class="c"># Voxel array parameters</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xl</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">yl</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">zl</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xo</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">yo</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">zo</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fx</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fy</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fz</span> <span class="o">=</span> <span class="bp">None</span>
+        
+        <span class="c"># US images alignment parameters</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">wrapper</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">step</span> <span class="o">=</span> <span class="bp">None</span>
+        
+        <span class="c"># Voxel array data</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">V</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">contV</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">usedV</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">internalV</span> <span class="o">=</span> <span class="bp">None</span>
+        
+        <span class="c"># vtkImageData properties</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sx</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sy</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sz</span> <span class="o">=</span> <span class="bp">None</span>
+        
+        <span class="c"># Gaps filling parameters</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">method</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">blocksN</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">maxS</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">minPct</span> <span class="o">=</span> <span class="bp">None</span>
+        
+        <span class="c"># Features extracted from US images</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">features</span> <span class="o">=</span> <span class="bp">None</span>
+        
+        <span class="c"># Precisions container</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prec</span> <span class="o">=</span> <span class="p">{}</span>
+        
+        
+    
+    <span class="k">def</span> <span class="nf">setKineFile</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filePath</span><span class="p">):</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">kineFile</span> <span class="o">=</span> <span class="n">filePath</span>
+        
+    
+    <span class="k">def</span> <span class="nf">getKineFile</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">kineFile</span>
+        
+        
+    <span class="k">def</span> <span class="nf">setDataSourceProperties</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
+        <span class="c"># Check reading method</span>
+        <span class="k">if</span> <span class="s">&#39;fromUSFile&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            
+            <span class="c"># Read US file</span>
+            <span class="n">filePath</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;fromUSFile&#39;</span><span class="p">]</span> 
+            <span class="k">print</span> <span class="s">&#39;Getting US image properties from file {0}...&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">filePath</span><span class="p">)</span>
+            <span class="n">checkFilePath</span><span class="p">(</span><span class="n">filePath</span><span class="p">)</span>
+            <span class="n">D</span><span class="p">,</span> <span class="n">ds</span> <span class="o">=</span> <span class="n">readDICOM</span><span class="p">(</span><span class="n">filePath</span><span class="p">)</span>
+            <span class="k">print</span> <span class="s">&#39;US image properties got from file&#39;</span>
+            
+            <span class="c"># Get US image properties</span>
+            <span class="n">w</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">Rows</span>
+            <span class="n">checkImDim</span><span class="p">(</span><span class="n">w</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">w</span> <span class="o">=</span> <span class="n">w</span>
+            <span class="n">h</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">Columns</span>
+            <span class="n">checkImDim</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">h</span> <span class="o">=</span> <span class="n">h</span>
+            <span class="n">usFreq</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">ds</span><span class="o">.</span><span class="n">CineRate</span><span class="p">)</span>
+            <span class="n">checkFreq</span><span class="p">(</span><span class="n">usFreq</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">usFreq</span> <span class="o">=</span> <span class="n">usFreq</span>
+            <span class="n">usTimeVector</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">ds</span><span class="o">.</span><span class="n">FrameTimeVector</span><span class="p">)</span> <span class="o">/</span> <span class="mi">1000</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+            <span class="n">checkTimeVector</span><span class="p">(</span><span class="n">usTimeVector</span><span class="p">)</span>  
+            <span class="bp">self</span><span class="o">.</span><span class="n">usTimeVector</span> <span class="o">=</span> <span class="n">usTimeVector</span>
+        
+        <span class="k">else</span><span class="p">:</span>
+        
+            <span class="c"># Check w</span>
+            <span class="k">if</span> <span class="s">&#39;w&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+                <span class="n">w</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;w&#39;</span><span class="p">]</span>
+                <span class="n">checkImDim</span><span class="p">(</span><span class="n">w</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">w</span> <span class="o">=</span> <span class="n">w</span>
+                    
+            <span class="c"># Check h</span>
+            <span class="k">if</span> <span class="s">&#39;h&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+                <span class="n">h</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;h&#39;</span><span class="p">]</span>
+                <span class="n">checkImDim</span><span class="p">(</span><span class="n">h</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">h</span> <span class="o">=</span> <span class="n">h</span>
+            
+            <span class="c"># Check USFreq</span>
+            <span class="k">if</span> <span class="s">&#39;USFreq&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+                <span class="n">usFreq</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;USFreq&#39;</span><span class="p">]</span>
+                <span class="n">checkFreq</span><span class="p">(</span><span class="n">usFreq</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">usFreq</span> <span class="o">=</span> <span class="n">usFreq</span>
+            
+            <span class="c"># Check USTimeVector</span>
+            <span class="k">if</span> <span class="s">&#39;USTimeVector&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+                <span class="n">usTimeVector</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;USTimeVector&#39;</span><span class="p">]</span>
+                <span class="n">checkTimeVector</span><span class="p">(</span><span class="n">usTimeVector</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">usTimeVector</span> <span class="o">=</span> <span class="n">usTimeVector</span>
+        
+        
+        <span class="c"># Check pixel2mmX</span>
+        <span class="k">if</span> <span class="s">&#39;pixel2mmX&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">pixel2mmX</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;pixel2mmX&#39;</span><span class="p">]</span>
+            <span class="n">checkPixel2mm</span><span class="p">(</span><span class="n">pixel2mmX</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmX</span> <span class="o">=</span> <span class="n">pixel2mmX</span>
+
+        <span class="c"># Check pixel2mmY</span>
+        <span class="k">if</span> <span class="s">&#39;pixel2mmY&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">pixel2mmY</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;pixel2mmY&#39;</span><span class="p">]</span>
+            <span class="n">checkPixel2mm</span><span class="p">(</span><span class="n">pixel2mmY</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmY</span> <span class="o">=</span> <span class="n">pixel2mmY</span>
+    
+        <span class="c"># Check kineFreq</span>
+        <span class="k">if</span> <span class="s">&#39;kineFreq&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">kineFreq</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;kineFreq&#39;</span><span class="p">]</span>
+            <span class="n">checkFreq</span><span class="p">(</span><span class="n">kineFreq</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">kineFreq</span> <span class="o">=</span> <span class="n">kineFreq</span>
+        
+        <span class="c"># Check frequencies ratio</span>
+        <span class="c">#checkFreqRatio(self.usFreq, self.kineFreq)</span>
+        
+    
+    <span class="k">def</span> <span class="nf">calculatePoseForUSProbe</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mkrList</span><span class="o">=</span><span class="p">[</span><span class="s">&#39;M1&#39;</span><span class="p">,</span><span class="s">&#39;M3&#39;</span><span class="p">,</span><span class="s">&#39;M2&#39;</span><span class="p">,</span><span class="s">&#39;M4&#39;</span><span class="p">],</span> <span class="n">timeWin</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        
+        <span class="c"># Check input validity</span>
+        <span class="n">checkMkrList</span><span class="p">(</span><span class="n">mkrList</span><span class="p">)</span>
+        <span class="n">checkTimeWin</span><span class="p">(</span><span class="n">timeWin</span><span class="p">)</span>
+        <span class="n">checkKineFile</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">kineFile</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">checkTimeVector</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">usTimeVector</span><span class="p">)</span>
+            <span class="n">checkFreq</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">kineFreq</span><span class="p">)</span>
+            <span class="k">print</span> <span class="s">&#39;Kinematics data resampling will be based on US data time vector&#39;</span>
+            <span class="n">resampleStep</span> <span class="o">=</span> <span class="bp">None</span>
+            <span class="n">timeVector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">usTimeVector</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">checkFreq</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">kineFreq</span><span class="p">)</span>
+                <span class="n">checkFreq</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">usFreq</span><span class="p">)</span>
+                <span class="n">resampleStep</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kineFreq</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">usFreq</span>
+                <span class="n">timeVector</span> <span class="o">=</span> <span class="bp">None</span>
+                <span class="k">print</span> <span class="s">&#39;Kinematics data resampling will be based on US and kinematics frequency&#39;</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Impossible to resample kinematics data&#39;</span><span class="p">)</span>
+        
+        <span class="c"># Read C3D (http://b-tk.googlecode.com/svn/doc/Python/0.2/_getting_started.html)</span>
+        <span class="n">fileName</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kineFile</span>
+        <span class="k">print</span> <span class="s">&#39;Reading C3D file {0} ...&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">fileName</span><span class="p">)</span>
+        <span class="n">reader</span> <span class="o">=</span> <span class="n">btk</span><span class="o">.</span><span class="n">btkAcquisitionFileReader</span><span class="p">()</span>
+        <span class="n">reader</span><span class="o">.</span><span class="n">SetFilename</span><span class="p">(</span><span class="n">fileName</span><span class="p">)</span>
+        <span class="n">reader</span><span class="o">.</span><span class="n">Update</span><span class="p">()</span> 
+        <span class="n">acq</span> <span class="o">=</span> <span class="n">reader</span><span class="o">.</span><span class="n">GetOutput</span><span class="p">()</span>
+        
+        <span class="c"># Convert points unit to mm</span>
+        <span class="n">pointUnit</span> <span class="o">=</span> <span class="n">acq</span><span class="o">.</span><span class="n">GetPointUnit</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">pointUnit</span> <span class="o">==</span> <span class="s">&#39;mm&#39;</span><span class="p">:</span>
+            <span class="n">scaleFactor</span> <span class="o">=</span> <span class="mf">1.</span>
+        <span class="k">elif</span> <span class="n">pointUnit</span> <span class="o">==</span> <span class="s">&#39;m&#39;</span><span class="p">:</span>
+            <span class="n">scaleFactor</span> <span class="o">=</span> <span class="mf">1000.</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Point unit not recognized&#39;</span><span class="p">)</span>
+        
+        <span class="c"># Define frames window for calculation</span>
+        <span class="k">if</span> <span class="n">timeWin</span> <span class="o">&lt;&gt;</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">i1</span> <span class="o">=</span> <span class="n">timeWin</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">i2</span> <span class="o">=</span> <span class="n">timeWin</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">i1</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">i2</span> <span class="o">=</span> <span class="n">acq</span><span class="o">.</span><span class="n">GetPoint</span><span class="p">(</span><span class="n">mkrList</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">GetValues</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        
+        <span class="n">M1</span> <span class="o">=</span> <span class="n">mkrList</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">M2</span> <span class="o">=</span> <span class="n">mkrList</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">M3</span> <span class="o">=</span> <span class="n">mkrList</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">M4</span> <span class="o">=</span> <span class="n">mkrList</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+        
+        <span class="c"># Get relevant marker data (N x 3)</span>
+        <span class="n">M1</span> <span class="o">=</span> <span class="n">acq</span><span class="o">.</span><span class="n">GetPoint</span><span class="p">(</span><span class="n">M1</span><span class="p">)</span><span class="o">.</span><span class="n">GetValues</span><span class="p">()[</span><span class="n">i1</span><span class="p">:</span><span class="n">i2</span><span class="p">,:]</span> <span class="o">*</span> <span class="n">scaleFactor</span>
+        <span class="n">M2</span> <span class="o">=</span> <span class="n">acq</span><span class="o">.</span><span class="n">GetPoint</span><span class="p">(</span><span class="n">M2</span><span class="p">)</span><span class="o">.</span><span class="n">GetValues</span><span class="p">()[</span><span class="n">i1</span><span class="p">:</span><span class="n">i2</span><span class="p">,:]</span> <span class="o">*</span> <span class="n">scaleFactor</span>
+        <span class="n">M3</span> <span class="o">=</span> <span class="n">acq</span><span class="o">.</span><span class="n">GetPoint</span><span class="p">(</span><span class="n">M3</span><span class="p">)</span><span class="o">.</span><span class="n">GetValues</span><span class="p">()[</span><span class="n">i1</span><span class="p">:</span><span class="n">i2</span><span class="p">,:]</span> <span class="o">*</span> <span class="n">scaleFactor</span>
+        <span class="n">M4</span> <span class="o">=</span> <span class="n">acq</span><span class="o">.</span><span class="n">GetPoint</span><span class="p">(</span><span class="n">M4</span><span class="p">)</span><span class="o">.</span><span class="n">GetValues</span><span class="p">()[</span><span class="n">i1</span><span class="p">:</span><span class="n">i2</span><span class="p">,:]</span> <span class="o">*</span> <span class="n">scaleFactor</span>
+        <span class="k">print</span> <span class="s">&#39;C3D file read&#39;</span>
+        
+        <span class="c"># Resampling markers data to US frequency</span>
+        <span class="k">print</span> <span class="s">&#39;Reseampling markers data to US frequency...&#39;</span>
+<span class="c">#        import matplotlib.pyplot as plt</span>
+<span class="c">#        plt.plot(M1[:,1])</span>
+<span class="c">#        plt.hold(True)</span>
+        <span class="n">M1</span> <span class="o">=</span> <span class="n">resampleMarker</span><span class="p">(</span><span class="n">M1</span><span class="p">,</span> <span class="n">step</span><span class="o">=</span><span class="n">resampleStep</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="n">timeVector</span><span class="p">,</span> <span class="n">origFreq</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">kineFreq</span><span class="p">)</span>
+<span class="c">#        plt.plot(M1[:,1])</span>
+<span class="c">#        plt.show()</span>
+        <span class="n">M2</span> <span class="o">=</span> <span class="n">resampleMarker</span><span class="p">(</span><span class="n">M2</span><span class="p">,</span> <span class="n">step</span><span class="o">=</span><span class="n">resampleStep</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="n">timeVector</span><span class="p">,</span> <span class="n">origFreq</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">kineFreq</span><span class="p">)</span>
+        <span class="n">M3</span> <span class="o">=</span> <span class="n">resampleMarker</span><span class="p">(</span><span class="n">M3</span><span class="p">,</span> <span class="n">step</span><span class="o">=</span><span class="n">resampleStep</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="n">timeVector</span><span class="p">,</span> <span class="n">origFreq</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">kineFreq</span><span class="p">)</span>
+        <span class="n">M4</span> <span class="o">=</span> <span class="n">resampleMarker</span><span class="p">(</span><span class="n">M4</span><span class="p">,</span> <span class="n">step</span><span class="o">=</span><span class="n">resampleStep</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="n">timeVector</span><span class="p">,</span> <span class="n">origFreq</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">kineFreq</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&#39;Frames number after resampling: {0}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">M1</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">print</span> <span class="s">&#39;Markers data resampled&#39;</span>
+
+        <span class="k">print</span> <span class="s">&#39;Calculating US probe roto-translation matrix for all time frames ...&#39;</span>
+        <span class="c"># Create probe reference frame (N x 3 x 3)</span>
+<span class="c">#        M34 = M4 + (M3 - M4) / 2</span>
+<span class="c">#        M12 = M1 + (M2 - M1) / 2</span>
+<span class="c">#        Zpr = getVersor(np.cross(M3 - M1, M4 - M2))</span>
+<span class="c">#        Xtemp = getVersor(np.cross(M34 - M12, Zpr))</span>
+<span class="c">#        Ypr = getVersor(np.cross(Zpr, Xtemp))</span>
+<span class="c">#        Xpr = getVersor(np.cross(Ypr, Zpr))</span>
+        <span class="n">Xpr</span> <span class="o">=</span> <span class="n">getVersor</span><span class="p">(</span><span class="n">M4</span> <span class="o">-</span> <span class="n">M3</span><span class="p">)</span>
+        <span class="n">Zpr</span> <span class="o">=</span> <span class="n">getVersor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">Xpr</span><span class="p">,</span> <span class="n">M2</span> <span class="o">-</span> <span class="n">M3</span><span class="p">))</span>
+        <span class="n">Ypr</span> <span class="o">=</span> <span class="n">getVersor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">Zpr</span><span class="p">,</span> <span class="n">Xpr</span><span class="p">))</span>
+        
+        <span class="c"># Create probe reference frame (N x 3 x 3)</span>
+        <span class="n">Rpr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">((</span><span class="n">Xpr</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">Ypr</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">Zpr</span><span class="o">.</span><span class="n">T</span><span class="p">))</span>   <span class="c"># 3 x 3 x N</span>
+        <span class="n">Rpr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="n">Rpr</span><span class="p">,</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">))</span>  <span class="c"># N x 3 x 3</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">Rpr</span> <span class="o">=</span> <span class="n">Rpr</span>
+        <span class="c">#print np.dot(Rpr[1,:,:],Rpr[1,:,:].T)</span>
+        
+        <span class="c"># Define translation for probe</span>
+<span class="c">#        self.Tpr = M1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">Tpr</span> <span class="o">=</span> <span class="n">M3</span>
+        
+        <span class="k">print</span> <span class="s">&#39;US probe roto-translation matrix calculated&#39;</span>
+        
+        
+    <span class="k">def</span> <span class="nf">calculatePoseForUSImages</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        
+        <span class="c"># Check input validity</span>
+        <span class="n">checkIm2PrPose</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">prRim</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">Tim</span><span class="p">)</span>
+        <span class="n">checkPr2GlPose</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Rpr</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">Tpr</span><span class="p">)</span>
+        
+        <span class="k">print</span> <span class="s">&#39;Calculating US images roto-translation matrix for all time frames ...&#39;</span>        
+        
+        <span class="c"># Calculate rotation matrix for pixel to world</span>
+        <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Rpr</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">prRim</span><span class="p">)</span> <span class="c"># N x 3 x 3</span>
+        <span class="n">T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Rpr</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">Tim</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">Tpr</span>
+        
+        <span class="c"># Create affine transformation matrix (N x 4 x 4)</span>
+        <span class="n">Nf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">Tpr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">R</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">T</span><span class="p">,(</span><span class="n">Nf</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">1</span><span class="p">))),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">)),</span> <span class="p">(</span><span class="n">Nf</span><span class="p">,</span><span class="mi">1</span><span class="p">))</span>
+        <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">R</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">b</span><span class="p">,(</span><span class="n">Nf</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">4</span><span class="p">))),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        
+        <span class="k">print</span> <span class="s">&#39;US images roto-translation matrix calculated&#39;</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">R</span> <span class="o">=</span> <span class="n">R</span>
+        
+    
+    <span class="k">def</span> <span class="nf">extractFeatureFromUSImages</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">feature</span><span class="o">=</span><span class="s">&#39;2_points_on_line&#39;</span><span class="p">,</span> <span class="n">segmentation</span><span class="o">=</span><span class="s">&#39;manual&#39;</span><span class="p">,</span> <span class="n">featuresFile</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        
+        <span class="c"># Check input validity</span>
+        <span class="n">checkFeature</span><span class="p">(</span><span class="n">feature</span><span class="p">)</span>
+        <span class="n">checkSegmentation</span><span class="p">(</span><span class="n">segmentation</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">featuresFile</span> <span class="o">&lt;&gt;</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="n">checkFilePath</span><span class="p">(</span><span class="n">featuresFile</span><span class="p">)</span>
+        <span class="n">checkUsFiles</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">usFiles</span><span class="p">,</span> <span class="n">L</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        
+        <span class="c"># Read DICOM file</span>
+        <span class="k">print</span> <span class="s">&#39;Reading DICOM file {0} ...&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">usFiles</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">D</span><span class="p">,</span> <span class="n">ds</span> <span class="o">=</span> <span class="n">readDICOM</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">usFiles</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">I</span> <span class="o">=</span> <span class="n">pixelData2grey</span><span class="p">(</span><span class="n">D</span><span class="p">)</span>   <span class="c"># supposing D is &quot;small&quot; and fits in memory</span>
+        <span class="k">print</span> <span class="s">&#39;Number of frames: {0}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">I</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">print</span> <span class="s">&#39;DICOM file read&#39;</span>
+        
+        <span class="c"># Perform feature extraction</span>
+        <span class="k">print</span> <span class="s">&#39;Extracting features...&#39;</span>
+        <span class="k">if</span> <span class="n">featuresFile</span> <span class="o">==</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">feature</span> <span class="o">==</span> <span class="s">&#39;2_points_on_line&#39;</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">segmentation</span> <span class="o">==</span> <span class="s">&#39;manual&#39;</span><span class="p">:</span>
+                    <span class="n">ui</span> <span class="o">=</span> <span class="n">SegmentUI</span><span class="p">(</span><span class="n">I</span><span class="p">,</span> <span class="n">Nclicks</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">features</span> <span class="o">=</span> <span class="n">ui</span><span class="o">.</span><span class="n">getData</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">feature</span> <span class="o">==</span> <span class="s">&#39;1_point&#39;</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">segmentation</span> <span class="o">==</span> <span class="s">&#39;manual&#39;</span><span class="p">:</span>
+                    <span class="n">ui</span> <span class="o">=</span> <span class="n">SegmentUI</span><span class="p">(</span><span class="n">I</span><span class="p">,</span> <span class="n">Nclicks</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">features</span> <span class="o">=</span> <span class="n">ui</span><span class="o">.</span><span class="n">getData</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c"># Read file</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">featuresFile</span><span class="p">,</span> <span class="s">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">features</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+            
+        <span class="k">print</span> <span class="s">&#39;Features extracted&#39;</span>
+    
+
+    <span class="k">def</span> <span class="nf">calibrateProbe</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">init</span><span class="p">,</span> <span class="n">phantom</span><span class="o">=</span><span class="s">&#39;single_wall&#39;</span><span class="p">,</span> <span class="n">fixed</span><span class="o">=</span><span class="p">[],</span> <span class="n">correctResults</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        
+        <span class="c"># Check input validity  </span>
+        <span class="n">checkPhantom</span><span class="p">(</span><span class="n">phantom</span><span class="p">)</span>
+        <span class="n">checkFeatures</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">features</span><span class="p">)</span>
+        <span class="n">checkPr2GlPose</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Rpr</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">Tpr</span><span class="p">)</span>
+<span class="c">#        checkFreq(self.usFreq)</span>
+<span class="c">#        checkFreq(self.kineFreq)</span>
+<span class="c">#        checkFreqRatio(self.usFreq, self.kineFreq)</span>
+        
+        <span class="c"># Create expressions</span>
+        <span class="k">print</span> <span class="s">&#39;Defining symbolic expressions...&#39;</span>
+        <span class="n">eq</span><span class="p">,</span> <span class="n">J</span><span class="p">,</span> <span class="n">prTi</span><span class="p">,</span> <span class="n">syms</span><span class="p">,</span> <span class="n">allVariables</span><span class="p">,</span> <span class="n">mus</span> <span class="o">=</span> <span class="n">createCalibEquations</span><span class="p">()</span>
+        <span class="n">variables</span> <span class="o">=</span> <span class="n">allVariables</span><span class="p">[:]</span>
+        <span class="k">print</span> <span class="s">&#39;Expressions defined&#39;</span>
+            
+        <span class="c"># Set to 0 some variables depending on phantom</span>
+        <span class="k">if</span> <span class="n">phantom</span> <span class="o">==</span> <span class="s">&#39;single_wall&#39;</span><span class="p">:</span>
+            <span class="c"># Select equation</span>
+            <span class="n">eq</span> <span class="o">=</span> <span class="n">eq</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span>    <span class="c"># select 3rd equation</span>
+            <span class="n">J</span> <span class="o">=</span> <span class="n">J</span><span class="p">[</span><span class="mi">2</span><span class="p">,:]</span>      <span class="c"># select 3d equation</span>
+            <span class="n">J</span><span class="o">.</span><span class="n">col_del</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span>    <span class="c"># delete derivatives for x2</span>
+            <span class="n">J</span><span class="o">.</span><span class="n">col_del</span><span class="p">(</span><span class="mi">8</span><span class="p">)</span>    <span class="c"># delete derivatives for y2</span>
+            <span class="n">J</span><span class="o">.</span><span class="n">col_del</span><span class="p">(</span><span class="mi">9</span><span class="p">)</span>    <span class="c"># delete derivatives for alpha2</span>
+            <span class="c"># Set to 0 some variables</span>
+            <span class="n">eq</span> <span class="o">=</span> <span class="n">eq</span><span class="o">.</span><span class="n">subs</span><span class="p">([(</span><span class="n">syms</span><span class="p">[</span><span class="s">&#39;x2&#39;</span><span class="p">],</span><span class="mi">0</span><span class="p">),(</span><span class="n">syms</span><span class="p">[</span><span class="s">&#39;y2&#39;</span><span class="p">],</span><span class="mi">0</span><span class="p">),(</span><span class="n">syms</span><span class="p">[</span><span class="s">&#39;alpha2&#39;</span><span class="p">],</span><span class="mi">0</span><span class="p">)])</span>
+            <span class="n">J</span> <span class="o">=</span> <span class="n">J</span><span class="o">.</span><span class="n">subs</span><span class="p">([(</span><span class="n">syms</span><span class="p">[</span><span class="s">&#39;x2&#39;</span><span class="p">],</span><span class="mi">0</span><span class="p">),(</span><span class="n">syms</span><span class="p">[</span><span class="s">&#39;y2&#39;</span><span class="p">],</span><span class="mi">0</span><span class="p">),(</span><span class="n">syms</span><span class="p">[</span><span class="s">&#39;alpha2&#39;</span><span class="p">],</span><span class="mi">0</span><span class="p">)])</span>
+            <span class="k">del</span> <span class="n">syms</span><span class="p">[</span><span class="s">&#39;x2&#39;</span><span class="p">],</span> <span class="n">syms</span><span class="p">[</span><span class="s">&#39;y2&#39;</span><span class="p">],</span> <span class="n">syms</span><span class="p">[</span><span class="s">&#39;alpha2&#39;</span><span class="p">]</span>
+            <span class="n">variables</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="s">&#39;x2&#39;</span><span class="p">)</span>
+            <span class="n">variables</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="s">&#39;y2&#39;</span><span class="p">)</span>
+            <span class="n">variables</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="s">&#39;alpha2&#39;</span><span class="p">)</span>
+            <span class="c"># Delete unwanted variables</span>
+            <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">fixed</span><span class="p">:</span>
+                <span class="n">J</span><span class="o">.</span><span class="n">col_del</span><span class="p">(</span><span class="n">variables</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">f</span><span class="p">))</span>
+                <span class="n">eq</span> <span class="o">=</span> <span class="n">eq</span><span class="o">.</span><span class="n">subs</span><span class="p">([(</span><span class="n">syms</span><span class="p">[</span><span class="n">f</span><span class="p">],</span><span class="n">init</span><span class="p">[</span><span class="n">f</span><span class="p">])])</span>
+                <span class="n">J</span> <span class="o">=</span> <span class="n">J</span><span class="o">.</span><span class="n">subs</span><span class="p">([(</span><span class="n">syms</span><span class="p">[</span><span class="n">f</span><span class="p">],</span><span class="n">init</span><span class="p">[</span><span class="n">f</span><span class="p">])])</span>
+                <span class="k">del</span> <span class="n">syms</span><span class="p">[</span><span class="n">f</span><span class="p">]</span>
+                <span class="n">variables</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+            
+        <span class="c"># Check variables init values</span>
+        <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">variables</span><span class="p">))</span><span class="o">.</span><span class="n">issubset</span><span class="p">(</span><span class="n">init</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">==</span> <span class="bp">False</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;Some variables were not initialized&#39;</span><span class="p">)</span>
+        <span class="n">initValues</span> <span class="o">=</span> <span class="p">[</span><span class="n">init</span><span class="p">[</span><span class="n">variables</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="nb">len</span><span class="p">(</span><span class="n">variables</span><span class="p">))]</span>
+        
+        <span class="c"># Calculate frequencies ratio</span>
+<span class="c">#        freqRatio = self.kineFreq / self.usFreq</span>
+        
+        <span class="c"># Solve the equations</span>
+        <span class="k">print</span> <span class="s">&#39;List of variables: {0}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">variables</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&#39;List of initial values: {0}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">initValues</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&#39;Solving equations system...&#39;</span>
+<span class="c">#        sol = solveEquations(eq, J, syms, variables, initValues, self.Rpr[::freqRatio,:,:], self.Tpr[::freqRatio,:], self.features)</span>
+        <span class="n">sol</span><span class="p">,</span> <span class="n">kond</span> <span class="o">=</span> <span class="n">solveEquations</span><span class="p">(</span><span class="n">eq</span><span class="p">,</span> <span class="n">J</span><span class="p">,</span> <span class="n">syms</span><span class="p">,</span> <span class="n">variables</span><span class="p">,</span> <span class="n">initValues</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">Rpr</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">Tpr</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">features</span><span class="p">)</span>  
+        <span class="k">print</span> <span class="s">&#39;Iterations terminated ({0})&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">sol</span><span class="o">.</span><span class="n">message</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="n">sol</span><span class="o">.</span><span class="n">success</span><span class="p">:</span>
+            <span class="c"># Show conditioning number</span>
+            <span class="k">print</span> <span class="s">&#39;Condition number: </span><span class="si">%d</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">kond</span>
+            <span class="c"># Create solution dictionary</span>
+            <span class="k">print</span> <span class="s">&#39;System succesfully solved&#39;</span> 
+            <span class="n">x</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">allVariables</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">variables</span><span class="p">:</span>
+                    <span class="n">x</span><span class="p">[</span><span class="n">v</span><span class="p">]</span> <span class="o">=</span> <span class="n">sol</span><span class="o">.</span><span class="n">x</span><span class="p">[</span><span class="n">variables</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">v</span><span class="p">)]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">init</span><span class="p">:</span>
+                        <span class="n">x</span><span class="p">[</span><span class="n">v</span><span class="p">]</span> <span class="o">=</span> <span class="n">init</span><span class="p">[</span><span class="n">v</span><span class="p">]</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">x</span><span class="p">[</span><span class="n">v</span><span class="p">]</span> <span class="o">=</span> <span class="mf">0.</span>
+            <span class="c"># Correct results if wanted</span>
+            <span class="k">if</span> <span class="n">correctResults</span><span class="p">:</span>
+                <span class="k">print</span> <span class="s">&#39;Correcting results...&#39;</span>
+                <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;alpha1&#39;</span><span class="p">,</span> <span class="s">&#39;beta1&#39;</span><span class="p">,</span> <span class="s">&#39;gamma1&#39;</span><span class="p">,</span> <span class="s">&#39;alpha2&#39;</span><span class="p">,</span> <span class="s">&#39;beta2&#39;</span><span class="p">,</span> <span class="s">&#39;gamma2&#39;</span><span class="p">]:</span>
+                    <span class="n">x</span><span class="p">[</span><span class="n">a</span><span class="p">]</span> <span class="o">=</span> <span class="n">setInsideRange</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="n">a</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="mi">2</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
+                <span class="n">val</span> <span class="o">=</span> <span class="n">setInsideRange</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="s">&#39;beta1&#39;</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="o">/</span><span class="mi">2</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">val</span> <span class="o">&lt;&gt;</span> <span class="n">x</span><span class="p">[</span><span class="s">&#39;beta1&#39;</span><span class="p">]:</span>
+                    <span class="n">x</span><span class="p">[</span><span class="s">&#39;beta1&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span>
+                    <span class="n">x</span><span class="p">[</span><span class="s">&#39;alpha1&#39;</span><span class="p">]</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span>
+                    <span class="n">x</span><span class="p">[</span><span class="s">&#39;gamma1&#39;</span><span class="p">]</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span>
+                <span class="k">if</span> <span class="n">x</span><span class="p">[</span><span class="s">&#39;sy&#39;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">x</span><span class="p">[</span><span class="s">&#39;gamma1&#39;</span><span class="p">]</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span>
+                    <span class="n">x</span><span class="p">[</span><span class="s">&#39;sy&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">x</span><span class="p">[</span><span class="s">&#39;sy&#39;</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">x</span><span class="p">[</span><span class="s">&#39;sx&#39;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">x</span><span class="p">[</span><span class="s">&#39;alpha1&#39;</span><span class="p">]</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span>
+                    <span class="n">x</span><span class="p">[</span><span class="s">&#39;beta1&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">x</span><span class="p">[</span><span class="s">&#39;beta1&#39;</span><span class="p">]</span>
+                    <span class="n">x</span><span class="p">[</span><span class="s">&#39;gamma1&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">-</span> <span class="n">x</span><span class="p">[</span><span class="s">&#39;gamma1&#39;</span><span class="p">]</span>
+                    <span class="n">x</span><span class="p">[</span><span class="s">&#39;sx&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">x</span><span class="p">[</span><span class="s">&#39;sx&#39;</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;alpha1&#39;</span><span class="p">,</span> <span class="s">&#39;gamma1&#39;</span><span class="p">,</span> <span class="s">&#39;alpha2&#39;</span><span class="p">,</span> <span class="s">&#39;gamma2&#39;</span><span class="p">]:</span>
+                    <span class="n">x</span><span class="p">[</span><span class="n">a</span><span class="p">]</span> <span class="o">=</span> <span class="n">setInsideRange</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="n">a</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="mi">2</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
+                <span class="k">print</span> <span class="s">&#39;Results corrected&#39;</span>
+            <span class="c"># Calculate image-to-probe attitude</span>
+            <span class="n">subs</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="n">subs</span><span class="p">[</span><span class="s">&#39;x1&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="s">&#39;x1&#39;</span><span class="p">]</span>
+            <span class="n">subs</span><span class="p">[</span><span class="s">&#39;y1&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="s">&#39;y1&#39;</span><span class="p">]</span>
+            <span class="n">subs</span><span class="p">[</span><span class="s">&#39;z1&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="s">&#39;z1&#39;</span><span class="p">]</span>
+            <span class="n">subs</span><span class="p">[</span><span class="s">&#39;alpha1&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="s">&#39;alpha1&#39;</span><span class="p">]</span>
+            <span class="n">subs</span><span class="p">[</span><span class="s">&#39;beta1&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="s">&#39;beta1&#39;</span><span class="p">]</span>
+            <span class="n">subs</span><span class="p">[</span><span class="s">&#39;gamma1&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="s">&#39;gamma1&#39;</span><span class="p">]</span>
+            <span class="n">prTi</span> <span class="o">=</span> <span class="n">prTi</span><span class="o">.</span><span class="n">evalf</span><span class="p">(</span><span class="n">subs</span><span class="o">=</span><span class="n">subs</span><span class="p">)</span>
+            <span class="n">prTi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">prTi</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
+            <span class="n">prRim</span> <span class="o">=</span> <span class="n">prTi</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">3</span><span class="p">,</span><span class="mi">0</span><span class="p">:</span><span class="mi">3</span><span class="p">]</span>
+            <span class="n">Tim</span> <span class="o">=</span> <span class="n">prTi</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span>
+            <span class="c"># Extract pixem2mm values</span>
+            <span class="n">sx</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="s">&#39;sx&#39;</span><span class="p">]</span>
+            <span class="n">sy</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="s">&#39;sy&#39;</span><span class="p">]</span>
+            <span class="c"># Print results</span>
+            <span class="n">rad2deg</span> <span class="o">=</span> <span class="mf">180.</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> 
+            <span class="k">for</span> <span class="n">v</span><span class="p">,</span> <span class="n">mu</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">allVariables</span><span class="p">,</span> <span class="n">mus</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">mu</span> <span class="o">==</span> <span class="s">&#39;rad&#39;</span><span class="p">:</span>
+                    <span class="n">val</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="n">v</span><span class="p">]</span> <span class="o">*</span> <span class="n">rad2deg</span>
+                    <span class="n">mu</span> <span class="o">=</span> <span class="s">&#39;deg&#39;</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">val</span> <span class="o">=</span> <span class="n">x</span><span class="p">[</span><span class="n">v</span><span class="p">]</span>
+                <span class="k">print</span> <span class="n">v</span> <span class="o">+</span> <span class="p">(</span><span class="s">&#39;: </span><span class="si">%f</span><span class="s"> &#39;</span> <span class="o">%</span> <span class="n">val</span><span class="p">)</span> <span class="o">+</span> <span class="n">mu</span>            
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;System not succesfully solved&#39;</span> <span class="p">)</span>
+
+        <span class="c"># Set data internally</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prRim</span> <span class="o">=</span> <span class="n">prRim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">Tim</span> <span class="o">=</span> <span class="n">Tim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmX</span> <span class="o">=</span> <span class="n">sx</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmY</span> <span class="o">=</span> <span class="n">sy</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">calib</span> <span class="o">=</span> <span class="n">sol</span>
+    
+    
+    <span class="k">def</span> <span class="nf">getProbeCalibrationData</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">prRim</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">Tim</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmX</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmY</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">calib</span>
+
+
+    <span class="k">def</span> <span class="nf">setProbeCalibrationData</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prRim</span><span class="p">,</span> <span class="n">Tim</span><span class="p">):</span>
+        
+        <span class="c"># Check input validity</span>
+        <span class="n">checkIm2PrPose</span><span class="p">(</span><span class="n">prRim</span><span class="p">,</span> <span class="n">Tim</span><span class="p">)</span>
+            
+        <span class="bp">self</span><span class="o">.</span><span class="n">prRim</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">Tim</span> <span class="o">=</span> <span class="n">prRim</span><span class="p">,</span> <span class="n">Tim</span>
+        
+    
+    <span class="k">def</span> <span class="nf">initVoxelArray</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fxyz</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">)):</span>
+        
+        <span class="c"># Check input validity</span>
+        <span class="n">checkFxyz</span><span class="p">(</span><span class="n">fxyz</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fx</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fy</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fz</span> <span class="o">=</span> <span class="n">fxyz</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">fxyz</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">fxyz</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">checkIm2GlPose</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">R</span><span class="p">)</span>
+        <span class="n">checkImDim</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">)</span>
+        <span class="n">checkImDim</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">)</span>
+        <span class="n">checkPixel2mm</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmX</span><span class="p">)</span>
+        <span class="n">checkPixel2mm</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmY</span><span class="p">)</span>
+        
+        <span class="c"># Calculate volume dimensions</span>
+        <span class="k">print</span> <span class="s">&#39;Calculating voxel array dimension ...&#39;</span>
+        <span class="n">pc</span> <span class="o">=</span> <span class="n">createImageCorners</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmX</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmY</span><span class="p">)</span>
+        <span class="n">pcg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">R</span><span class="p">,</span><span class="n">pc</span><span class="p">)</span>  <span class="c"># N x 4</span>
+        <span class="n">xmin</span><span class="p">,</span> <span class="n">xmax</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">amin</span><span class="p">(</span><span class="n">pcg</span><span class="p">[:,</span><span class="mi">0</span><span class="p">]),</span> <span class="n">np</span><span class="o">.</span><span class="n">amax</span><span class="p">(</span><span class="n">pcg</span><span class="p">[:,</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">ymin</span><span class="p">,</span> <span class="n">ymax</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">amin</span><span class="p">(</span><span class="n">pcg</span><span class="p">[:,</span><span class="mi">1</span><span class="p">]),</span> <span class="n">np</span><span class="o">.</span><span class="n">amax</span><span class="p">(</span><span class="n">pcg</span><span class="p">[:,</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">zmin</span><span class="p">,</span> <span class="n">zmax</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">amin</span><span class="p">(</span><span class="n">pcg</span><span class="p">[:,</span><span class="mi">2</span><span class="p">]),</span> <span class="n">np</span><span class="o">.</span><span class="n">amax</span><span class="p">(</span><span class="n">pcg</span><span class="p">[:,</span><span class="mi">2</span><span class="p">])</span>
+         
+        <span class="c"># Calculate voxel array size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xl</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fx</span> <span class="o">*</span> <span class="n">xmax</span><span class="p">)</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fx</span> <span class="o">*</span> <span class="n">xmin</span><span class="p">))</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">yl</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fy</span> <span class="o">*</span> <span class="n">ymax</span><span class="p">)</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fy</span> <span class="o">*</span> <span class="n">ymin</span><span class="p">))</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">zl</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fz</span> <span class="o">*</span> <span class="n">zmax</span><span class="p">)</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fz</span> <span class="o">*</span> <span class="n">zmin</span><span class="p">))</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xo</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fx</span> <span class="o">*</span> <span class="n">xmin</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">yo</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fy</span> <span class="o">*</span> <span class="n">ymin</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">zo</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fz</span> <span class="o">*</span> <span class="n">zmin</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&#39;Voxel array dimension: {0} x {1} x {2}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">xl</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">yl</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">zl</span><span class="p">)</span>
+        
+        <span class="c"># Create voxel array for grey values</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">V</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">xl</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">yl</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">zl</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+        
+        <span class="c"># Create voxel array for grey values indicating hox many times a voxel</span>
+        <span class="c"># has been written</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">contV</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">V</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+        
+        <span class="c"># Create voxel array for bool values indicating if the voxel contains</span>
+        <span class="c"># raw data</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">usedV</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">V</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+        
+        <span class="c"># Create voxel array for bool values indicating if the voxel belongs</span>
+        <span class="c"># to the seauence of slices (or near surrondings)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">internalV</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">V</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+        
+    
+    <span class="k">def</span> <span class="nf">setUSFiles</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">usFiles</span><span class="p">):</span>
+        
+        <span class="n">checkUsFiles</span><span class="p">(</span><span class="n">usFiles</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">usFiles</span> <span class="o">=</span> <span class="n">usFiles</span>
+        
+    
+    <span class="k">def</span> <span class="nf">getUSFiles</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">usFiles</span>
+        
+    
+    <span class="k">def</span> <span class="nf">setUSImagesAlignmentParameters</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
+        <span class="c"># Check wrapper</span>
+        <span class="k">if</span> <span class="s">&#39;wrapper&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">wrapper</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;wrapper&#39;</span><span class="p">]</span>
+            <span class="n">checkWrapper</span><span class="p">(</span><span class="n">wrapper</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">wrapper</span> <span class="o">=</span> <span class="n">wrapper</span>
+
+        <span class="c"># Check step</span>
+        <span class="k">if</span> <span class="s">&#39;step&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">step</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;step&#39;</span><span class="p">]</span>
+            <span class="n">checkStep</span><span class="p">(</span><span class="n">step</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">step</span> <span class="o">=</span> <span class="n">step</span>
+        
+    
+    <span class="k">def</span> <span class="nf">alignUSImages</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        
+        <span class="c"># Check input validity</span>
+        <span class="n">checkImDim</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">)</span>
+        <span class="n">checkImDim</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">)</span>
+        <span class="n">checkPixel2mm</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmX</span><span class="p">)</span>
+        <span class="n">checkPixel2mm</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmY</span><span class="p">)</span>
+<span class="c">#        checkFreq(self.usFreq)</span>
+<span class="c">#        checkFreq(self.kineFreq)</span>
+<span class="c">#        checkFreqRatio(self.usFreq, self.kineFreq)</span>
+        <span class="n">checkUsFiles</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">usFiles</span><span class="p">)</span>
+        <span class="n">checkIm2GlPose</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">R</span><span class="p">)</span>
+        <span class="n">checkFxyz</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">fx</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fy</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fz</span><span class="p">])</span>
+        <span class="c"># xl, xo</span>
+        <span class="n">checkV</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">V</span><span class="p">)</span>
+        <span class="n">checkV</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">contV</span><span class="p">)</span>
+        <span class="n">checkV</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">usedV</span><span class="p">)</span>
+        <span class="n">checkV</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">internalV</span><span class="p">)</span>
+        <span class="n">checkWrapper</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">wrapper</span><span class="p">)</span>
+        <span class="n">checkStep</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">step</span><span class="p">)</span>
+
+        
+        <span class="c"># Create pixel coordinates (in mm) in image reference frame</span>
+        <span class="k">print</span> <span class="s">&#39;Creating pixel 3D coordinates in image reference frame ...&#39;</span>
+        <span class="n">Np</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">h</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">w</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmX</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmY</span>
+        <span class="n">xv</span><span class="p">,</span> <span class="n">yv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+        <span class="n">xv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">xv</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">Np</span><span class="p">))</span>
+        <span class="n">yv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">yv</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="n">Np</span><span class="p">))</span>
+        <span class="n">zv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span><span class="n">Np</span><span class="p">))</span>
+        <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span><span class="n">Np</span><span class="p">))</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">xv</span><span class="p">,</span><span class="n">yv</span><span class="p">,</span><span class="n">zv</span><span class="p">,</span><span class="n">b</span><span class="p">),</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="c"># 4 x Np</span>
+        <span class="k">print</span> <span class="s">&#39;Pixel 3D coordinates calculated&#39;</span>
+        
+        <span class="c"># Calculate image corners coordinates</span>
+        <span class="n">pc</span> <span class="o">=</span> <span class="n">createImageCorners</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">w</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">h</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmX</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmY</span><span class="p">)</span>        
+        
+        <span class="c"># Calculate frequencies ratio</span>
+<span class="c">#        freqRatio = self.kineFreq / self.usFreq</span>
+        
+        <span class="c"># Calculate position for all the pixels, for all the time instant</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+        <span class="n">fileNames</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">usFiles</span>
+        <span class="n">ioffset</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="nb">len</span><span class="p">(</span><span class="n">fileNames</span><span class="p">)):</span>
+            <span class="c"># Read DICOM file</span>
+            <span class="k">print</span> <span class="s">&#39;Reading DICOM file {0} ...&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">fileNames</span><span class="p">[</span><span class="n">f</span><span class="p">])</span>
+            <span class="n">D</span><span class="p">,</span> <span class="n">ds</span> <span class="o">=</span> <span class="n">readDICOM</span><span class="p">(</span><span class="n">fileNames</span><span class="p">[</span><span class="n">f</span><span class="p">])</span>
+            <span class="k">print</span> <span class="s">&#39;DICOM file read&#39;</span>
+            <span class="c">#print D.shape</span>
+            <span class="n">Ni</span> <span class="o">=</span> <span class="n">D</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="n">Ni</span><span class="p">):</span>
+                <span class="c"># Create gray values</span>
+                <span class="c">#I = (.2126*D[0,i,:,:]+.7152*D[1,i,:,:]+.0722*D[2,i,:,:]).squeeze().astype(np.uint8)</span>
+                <span class="c">#I = rgb2grey(D[0,i,:,:].squeeze(), D[1,i,:,:].squeeze(), D[2,i,:,:].squeeze())</span>
+                <span class="c">#print D.shape</span>
+                <span class="n">I</span> <span class="o">=</span> <span class="n">pixelData2grey</span><span class="p">(</span><span class="n">D</span><span class="p">[:,</span><span class="n">i</span><span class="p">,:,:])</span>
+                <span class="c">#print I.shape</span>
+                <span class="k">print</span> <span class="s">&#39;Inserting oriented slice for instant {0}/{1} ...&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span><span class="n">Ni</span><span class="p">)</span>
+                <span class="c"># Fill voxel array with grey values</span>
+<span class="c">#                iR = freqRatio*(i+ioffset)</span>
+                <span class="n">iR</span> <span class="o">=</span> <span class="n">i</span> <span class="o">+</span> <span class="n">ioffset</span>
+                <span class="n">pg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">R</span><span class="p">[</span><span class="n">iR</span><span class="p">,:,:],</span><span class="n">p</span><span class="p">)</span> <span class="c"># mm</span>
+                <span class="n">x</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">pg</span><span class="p">[</span><span class="mi">0</span><span class="p">,:]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">fx</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">xo</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span> <span class="c"># 1 x Np</span>
+                <span class="n">y</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">pg</span><span class="p">[</span><span class="mi">1</span><span class="p">,:]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">fy</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">yo</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span>
+                <span class="n">z</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">pg</span><span class="p">[</span><span class="mi">2</span><span class="p">,:]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">fz</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">zo</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span>
+                <span class="n">idxV</span> <span class="o">=</span> <span class="n">xyz2idx</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">xl</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">yl</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">zl</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">V</span><span class="p">[</span><span class="n">idxV</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">contV</span><span class="p">[</span><span class="n">idxV</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">V</span><span class="p">[</span><span class="n">idxV</span><span class="p">])</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">contV</span><span class="p">[</span><span class="n">idxV</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="n">I</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">contV</span><span class="p">[</span><span class="n">idxV</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">contV</span><span class="p">[</span><span class="n">idxV</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">usedV</span><span class="p">[</span><span class="n">idxV</span><span class="p">]</span> <span class="o">=</span> <span class="bp">True</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">wrapper</span> <span class="o">==</span> <span class="s">&#39;parallelepipedon&#39;</span><span class="p">:</span>
+                    <span class="n">xc</span> <span class="o">=</span> <span class="n">x</span>
+                    <span class="n">yc</span> <span class="o">=</span> <span class="n">y</span>
+                    <span class="n">zc</span> <span class="o">=</span> <span class="n">z</span>
+                <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">wrapper</span> <span class="o">==</span> <span class="s">&#39;convex_hull&#39;</span><span class="p">:</span>
+                    <span class="c"># Calculate coordinates of image corners </span>
+                    <span class="n">pcg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">R</span><span class="p">[</span><span class="n">iR</span><span class="p">,:,:],</span><span class="n">pc</span><span class="p">)</span> <span class="c"># mm</span>
+                    <span class="n">xc</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">pcg</span><span class="p">[</span><span class="mi">0</span><span class="p">,:]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">fx</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">xo</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span> <span class="c"># 1 x 4</span>
+                    <span class="n">yc</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">pcg</span><span class="p">[</span><span class="mi">1</span><span class="p">,:]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">fy</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">yo</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span>
+                    <span class="n">zc</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">pcg</span><span class="p">[</span><span class="mi">2</span><span class="p">,:]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">fz</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">zo</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span>            
+                <span class="c"># Create wrapper</span>
+                <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">xcPrev</span> <span class="o">=</span> <span class="n">xc</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                    <span class="n">ycPrev</span> <span class="o">=</span> <span class="n">yc</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                    <span class="n">zcPrev</span> <span class="o">=</span> <span class="n">zc</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                    <span class="k">continue</span>
+                <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">Ni</span><span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">i</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">step</span><span class="p">:</span>
+                        <span class="k">continue</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">wrapper</span> <span class="o">==</span> <span class="s">&#39;parallelepipedon&#39;</span><span class="p">:</span>
+                    <span class="k">print</span> <span class="s">&#39;Creating parallelepipedon ...&#39;</span>
+                    <span class="n">xcMin</span><span class="p">,</span> <span class="n">xcMax</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">((</span><span class="n">xc</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span><span class="n">xcPrev</span><span class="o">.</span><span class="n">min</span><span class="p">())),</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">((</span><span class="n">xc</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span><span class="n">xcPrev</span><span class="o">.</span><span class="n">max</span><span class="p">()))</span>
+                    <span class="n">ycMin</span><span class="p">,</span> <span class="n">ycMax</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">((</span><span class="n">yc</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span><span class="n">ycPrev</span><span class="o">.</span><span class="n">min</span><span class="p">())),</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">((</span><span class="n">yc</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span><span class="n">ycPrev</span><span class="o">.</span><span class="n">max</span><span class="p">()))</span>
+                    <span class="n">zcMin</span><span class="p">,</span> <span class="n">zcMax</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">((</span><span class="n">zc</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span><span class="n">zcPrev</span><span class="o">.</span><span class="n">min</span><span class="p">())),</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">((</span><span class="n">zc</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span><span class="n">zcPrev</span><span class="o">.</span><span class="n">max</span><span class="p">()))</span>
+                    <span class="n">xcInternal</span><span class="p">,</span> <span class="n">ycInternal</span><span class="p">,</span> <span class="n">zcInternal</span> <span class="o">=</span> <span class="n">getCubeCoords</span><span class="p">(([</span><span class="n">xcMin</span><span class="p">,</span><span class="n">xcMax</span><span class="p">],[</span><span class="n">ycMin</span><span class="p">,</span><span class="n">ycMax</span><span class="p">],[</span><span class="n">zcMin</span><span class="p">,</span><span class="n">zcMax</span><span class="p">]))</span>
+                <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">wrapper</span> <span class="o">==</span> <span class="s">&#39;convex_hull&#39;</span><span class="p">:</span>
+                    <span class="k">print</span> <span class="s">&#39;Creating convex hull ...&#39;</span>
+                    <span class="n">cCurrent</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">((</span><span class="n">xc</span><span class="p">,</span><span class="n">yc</span><span class="p">,</span><span class="n">zc</span><span class="p">))</span><span class="o">.</span><span class="n">T</span>
+                    <span class="n">cPrev</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">((</span><span class="n">xcPrev</span><span class="p">,</span><span class="n">ycPrev</span><span class="p">,</span><span class="n">zcPrev</span><span class="p">))</span><span class="o">.</span><span class="n">T</span>
+                    <span class="n">cHull</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">((</span><span class="n">cCurrent</span><span class="p">,</span><span class="n">cPrev</span><span class="p">))</span>
+                    <span class="n">cInternal</span> <span class="o">=</span> <span class="n">getCoordsInConvexHull</span><span class="p">(</span><span class="n">cHull</span><span class="p">)</span>
+                    <span class="n">xcInternal</span><span class="p">,</span> <span class="n">ycInternal</span><span class="p">,</span> <span class="n">zcInternal</span> <span class="o">=</span> <span class="n">cInternal</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">cInternal</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="n">cInternal</span><span class="p">[:,</span><span class="mi">2</span><span class="p">]</span>
+                <span class="n">idxInternal</span> <span class="o">=</span> <span class="n">xyz2idx</span><span class="p">(</span><span class="n">xcInternal</span><span class="p">,</span> <span class="n">ycInternal</span><span class="p">,</span> <span class="n">zcInternal</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">xl</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">yl</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">zl</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">internalV</span><span class="p">[</span><span class="n">idxInternal</span><span class="p">]</span> <span class="o">=</span> <span class="bp">True</span>
+                <span class="n">xcPrev</span> <span class="o">=</span> <span class="n">xc</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                <span class="n">ycPrev</span> <span class="o">=</span> <span class="n">yc</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                <span class="n">zcPrev</span> <span class="o">=</span> <span class="n">zc</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                
+            <span class="n">ioffset</span> <span class="o">+=</span> <span class="n">Ni</span>
+                    
+        <span class="k">del</span> <span class="n">D</span><span class="p">,</span> <span class="n">I</span><span class="p">,</span> <span class="n">idxV</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">contV</span><span class="p">,</span> <span class="n">xcPrev</span><span class="p">,</span> <span class="n">ycPrev</span><span class="p">,</span> <span class="n">zcPrev</span>
+        <span class="n">elapsed</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="o">-</span> <span class="n">t</span>
+        <span class="k">print</span> <span class="s">&#39;Elapsed time: {0} s&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">elapsed</span><span class="p">)</span>
+        <span class="n">idxEmptyN</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="o">~</span><span class="bp">self</span><span class="o">.</span><span class="n">usedV</span><span class="p">)</span>
+        <span class="n">pctEmpty</span> <span class="o">=</span> <span class="mf">100.0</span> <span class="o">*</span> <span class="n">idxEmptyN</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">V</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">print</span> <span class="s">&#39;Pct of empty voxels: ({0}% total)&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">pctEmpty</span><span class="p">)</span>
+        <span class="n">pctInternal</span> <span class="o">=</span> <span class="mf">100.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">internalV</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">V</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">print</span> <span class="s">&#39;Estimate of pct of internal voxels: ({0}% total)&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">pctInternal</span><span class="p">)</span>
+        <span class="n">pctInternalEmpty</span> <span class="o">=</span> <span class="mf">100.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">internalV</span> <span class="o">&amp;</span> <span class="o">~</span><span class="bp">self</span><span class="o">.</span><span class="n">usedV</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">internalV</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&#39;Estimate of pct of internal empty voxels: ({0}</span><span class="si">% i</span><span class="s">nternal)&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">pctInternalEmpty</span><span class="p">)</span>
+    
+
+    <span class="k">def</span> <span class="nf">setGapFillingParameters</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
+        <span class="c"># Check method</span>
+        <span class="k">if</span> <span class="s">&#39;method&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">method</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;method&#39;</span><span class="p">]</span>
+            <span class="n">checkMethod</span><span class="p">(</span><span class="n">method</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">method</span> <span class="o">=</span> <span class="n">method</span>
+            
+        <span class="c"># Check blocksN</span>
+        <span class="k">if</span> <span class="s">&#39;blocksN&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">blocksN</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;blocksN&#39;</span><span class="p">]</span>
+            <span class="n">checkBlocksN</span><span class="p">(</span><span class="n">blocksN</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">blocksN</span> <span class="o">=</span> <span class="n">blocksN</span>
+
+        <span class="c"># Check maxS</span>
+        <span class="k">if</span> <span class="s">&#39;maxS&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">maxS</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;maxS&#39;</span><span class="p">]</span>
+            <span class="n">checkMaxS</span><span class="p">(</span><span class="n">maxS</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">maxS</span> <span class="o">=</span> <span class="n">maxS</span>
+        
+        <span class="c"># Check minPct</span>
+        <span class="k">if</span> <span class="s">&#39;minPct&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">minPct</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;minPct&#39;</span><span class="p">]</span>
+            <span class="n">checkMinPct</span><span class="p">(</span><span class="n">minPct</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">minPct</span> <span class="o">=</span> <span class="n">minPct</span>
+            
+    
+    <span class="k">def</span> <span class="nf">fillGaps</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    
+        <span class="c"># Check input validity</span>
+        <span class="n">checkMethod</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">method</span><span class="p">)</span>
+        <span class="n">checkBlocksN</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">blocksN</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s">&#39;AVG_CUBE&#39;</span><span class="p">:</span>
+            <span class="n">checkMaxS</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">maxS</span><span class="p">)</span>
+            <span class="n">checkMinPct</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">minPct</span><span class="p">)</span>        
+        <span class="n">checkV</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">V</span><span class="p">)</span>
+        <span class="n">checkV</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">usedV</span><span class="p">)</span>
+        <span class="n">checkV</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">internalV</span><span class="p">)</span>
+        <span class="c"># xl, xo</span>
+        
+        <span class="k">print</span> <span class="s">&#39;Filling empty voxels ({0}), when possible ...&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">method</span><span class="p">)</span>
+        <span class="n">bxl</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">xl</span>
+        <span class="n">byl</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">yl</span>
+        <span class="n">bzl</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">zl</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">blocksN</span><span class="p">)</span>
+        <span class="n">blockSize</span> <span class="o">=</span> <span class="n">bxl</span> <span class="o">*</span> <span class="n">byl</span> <span class="o">*</span> <span class="n">bzl</span>
+        <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">blocksN</span><span class="p">):</span>
+            <span class="k">print</span> <span class="s">&#39;Block {0} ...&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">b</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span>
+            <span class="c"># Initialize block indices</span>
+            <span class="n">idxBlock</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">V</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+            <span class="n">idxBlock</span><span class="p">[</span><span class="n">b</span><span class="o">*</span><span class="n">blockSize</span> <span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">([(</span><span class="n">b</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">*</span><span class="n">blockSize</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">V</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]])]</span> <span class="o">=</span> <span class="bp">True</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s">&#39;VNN&#39;</span><span class="p">:</span>
+                <span class="c"># Apply VNN</span>
+                <span class="n">bzl</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">idxBlock</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">bxl</span> <span class="o">*</span> <span class="n">byl</span><span class="p">)</span>
+                <span class="n">reshV</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">~</span><span class="bp">self</span><span class="o">.</span><span class="n">usedV</span> <span class="o">&amp;</span> <span class="bp">self</span><span class="o">.</span><span class="n">internalV</span><span class="p">)[</span><span class="n">idxBlock</span><span class="p">],</span> <span class="p">(</span><span class="n">bxl</span><span class="p">,</span><span class="n">byl</span><span class="p">,</span><span class="n">bzl</span><span class="p">))</span>
+                <span class="n">reshV2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">V</span><span class="p">[</span><span class="n">idxBlock</span><span class="p">],</span> <span class="p">(</span><span class="n">bxl</span><span class="p">,</span><span class="n">byl</span><span class="p">,</span><span class="n">bzl</span><span class="p">))</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">set_printoptions</span><span class="p">(</span><span class="n">threshold</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+                <span class="n">idxV</span> <span class="o">=</span> <span class="n">nd</span><span class="o">.</span><span class="n">distance_transform_edt</span><span class="p">(</span><span class="n">reshV</span><span class="p">,</span> <span class="n">return_distances</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">return_indices</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">V</span><span class="p">[</span><span class="n">idxBlock</span><span class="p">]</span> <span class="o">=</span> <span class="n">reshV2</span><span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">idxV</span><span class="p">)]</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">usedV</span><span class="p">[</span><span class="n">idxBlock</span><span class="p">]</span> <span class="o">=</span> <span class="bp">True</span>
+                <span class="c"># Print some info</span>
+                <span class="n">pctInternalEmpty</span> <span class="o">=</span> <span class="mf">100.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">internalV</span> <span class="o">&amp;</span> <span class="o">~</span><span class="bp">self</span><span class="o">.</span><span class="n">usedV</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">internalV</span><span class="p">)</span>
+                <span class="k">print</span> <span class="s">&#39;</span><span class="se">\t</span><span class="s">Estimate of pct of internal empty voxels: ({0}</span><span class="si">% i</span><span class="s">nternal)&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">pctInternalEmpty</span><span class="p">)</span> 
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">method</span> <span class="o">==</span> <span class="s">&#39;AVG_CUBE&#39;</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">S</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">maxS</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">b</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="c"># Generate voxel coordinates for the search cube</span>
+                        <span class="n">xCube</span><span class="p">,</span> <span class="n">yCube</span><span class="p">,</span> <span class="n">zCube</span> <span class="o">=</span> <span class="n">getCubeCoords</span><span class="p">(</span><span class="n">S</span><span class="p">)</span>
+                        <span class="c"># Remove central voxel of the cube</span>
+                        <span class="n">idxCentral</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nonzero</span><span class="p">((</span><span class="n">xCube</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">yCube</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">zCube</span> <span class="o">==</span> <span class="mi">0</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+                        <span class="n">xCube</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">xCube</span><span class="p">,</span> <span class="n">idxCentral</span><span class="p">)[:,</span> <span class="bp">None</span><span class="p">]</span>
+                        <span class="n">yCube</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">yCube</span><span class="p">,</span> <span class="n">idxCentral</span><span class="p">)[:,</span> <span class="bp">None</span><span class="p">]</span>
+                        <span class="n">zCube</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">zCube</span><span class="p">,</span> <span class="n">idxCentral</span><span class="p">)[:,</span> <span class="bp">None</span><span class="p">]</span>
+                        <span class="c"># Calculate distance from each vixel to central voxel</span>
+                        <span class="n">distNeighs</span> <span class="o">=</span> <span class="p">(</span><span class="n">xCube</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">yCube</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">zCube</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">**</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>
+                        <span class="n">idxSort</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">distNeighs</span><span class="p">)</span>
+                        <span class="n">distNeighs</span> <span class="o">=</span> <span class="mf">1.</span> <span class="o">/</span> <span class="n">distNeighs</span><span class="p">[</span><span class="n">idxSort</span><span class="p">,:]</span>
+                    <span class="n">idxEmpty</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nonzero</span><span class="p">((</span><span class="o">~</span><span class="bp">self</span><span class="o">.</span><span class="n">usedV</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">idxBlock</span> <span class="o">&amp;</span> <span class="bp">self</span><span class="o">.</span><span class="n">internalV</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>   <span class="c"># time bottleneck</span>
+                    <span class="c"># Get coordinates of empty voxels</span>
+                    <span class="n">xn</span><span class="p">,</span> <span class="n">yn</span><span class="p">,</span> <span class="n">zn</span> <span class="o">=</span> <span class="n">idx2xyz</span><span class="p">(</span><span class="n">idxEmpty</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">xl</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">yl</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">zl</span><span class="p">)</span>
+                    <span class="n">xn</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">xn</span><span class="p">,</span> <span class="p">(</span><span class="n">S</span><span class="o">**</span><span class="mi">3</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">))</span>
+                    <span class="n">yn</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">yn</span><span class="p">,</span> <span class="p">(</span><span class="n">S</span><span class="o">**</span><span class="mi">3</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">))</span>
+                    <span class="n">zn</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">zn</span><span class="p">,</span> <span class="p">(</span><span class="n">S</span><span class="o">**</span><span class="mi">3</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">))</span>
+                    <span class="n">idxNeighs</span> <span class="o">=</span> <span class="n">xyz2idx</span><span class="p">(</span><span class="n">xn</span><span class="o">+</span><span class="n">xCube</span><span class="p">,</span><span class="n">yn</span><span class="o">+</span><span class="n">yCube</span><span class="p">,</span><span class="n">zn</span><span class="o">+</span><span class="n">zCube</span><span class="p">,</span> <span class="n">xl</span><span class="p">,</span> <span class="n">yl</span><span class="p">,</span> <span class="n">zl</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+                    <span class="c"># Get values for neigbour voxels, empty or not</span>
+                    <span class="n">neighsV</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">V</span><span class="p">[</span><span class="n">idxNeighs</span><span class="p">]</span>
+                    <span class="n">neighsUsedV</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">usedV</span><span class="p">[</span><span class="n">idxNeighs</span><span class="p">]</span>
+                    <span class="k">del</span> <span class="n">idxNeighs</span>
+                    <span class="c"># Sort by distance</span>
+                    <span class="n">neighsV</span> <span class="o">=</span> <span class="n">neighsV</span><span class="p">[</span><span class="n">idxSort</span><span class="p">,:]</span>
+                    <span class="n">neighsUsedV</span> <span class="o">=</span> <span class="n">neighsUsedV</span><span class="p">[</span><span class="n">idxSort</span><span class="p">,:]</span>
+                    <span class="c"># Fill some empty voxels</span>
+                    <span class="n">idxFillable</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">neighsUsedV</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">minPct</span> <span class="o">*</span> <span class="p">(</span><span class="n">S</span><span class="o">**</span><span class="mi">3</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span> <span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span>
+                    <span class="n">wMeanNum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">neighsUsedV</span> <span class="o">*</span> <span class="n">neighsV</span> <span class="o">*</span> <span class="n">distNeighs</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span>
+                    <span class="n">wMeanDen</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">neighsUsedV</span> <span class="o">*</span> <span class="n">distNeighs</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">squeeze</span><span class="p">()</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">V</span><span class="p">[</span><span class="n">idxEmpty</span><span class="p">[</span><span class="n">idxFillable</span><span class="p">]]</span> <span class="o">=</span> <span class="p">(</span><span class="n">wMeanNum</span><span class="p">[</span><span class="n">idxFillable</span><span class="p">]</span> <span class="o">/</span> <span class="n">wMeanDen</span><span class="p">[</span><span class="n">idxFillable</span><span class="p">])</span><span class="o">.</span><span class="n">round</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>  
+                    <span class="bp">self</span><span class="o">.</span><span class="n">usedV</span><span class="p">[</span><span class="n">idxEmpty</span><span class="p">[</span><span class="n">idxFillable</span><span class="p">]]</span> <span class="o">=</span> <span class="bp">True</span>   
+                    <span class="c"># Print some info</span>
+                    <span class="n">pctInternalEmpty</span> <span class="o">=</span> <span class="mf">100.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">internalV</span> <span class="o">&amp;</span> <span class="o">~</span><span class="bp">self</span><span class="o">.</span><span class="n">usedV</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">internalV</span><span class="p">)</span>
+                    <span class="k">print</span> <span class="s">&#39;</span><span class="se">\t</span><span class="s">Estimate of pct of internal empty voxels after filling with cube of side {0}: ({1}</span><span class="si">% i</span><span class="s">nternal)&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">S</span><span class="p">,</span> <span class="n">pctInternalEmpty</span><span class="p">)</span>              
+                    <span class="c"># Delete biggest arrays in inner loop                </span>
+                    <span class="k">del</span> <span class="n">idxEmpty</span><span class="p">,</span> <span class="n">neighsV</span><span class="p">,</span> <span class="n">neighsUsedV</span><span class="p">,</span> <span class="n">idxFillable</span><span class="p">,</span> <span class="n">wMeanNum</span><span class="p">,</span> <span class="n">wMeanDen</span>
+        
+        <span class="k">print</span> <span class="s">&#39;Empty voxels filled when possible&#39;</span>
+        <span class="k">return</span> <span class="n">pctInternalEmpty</span>
+    
+    
+    <span class="k">def</span> <span class="nf">setVtkImageDataProperties</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        
+        <span class="c"># Check sxyz</span>
+        <span class="k">if</span> <span class="s">&#39;sxyz&#39;</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+            <span class="n">sxyz</span> <span class="o">=</span> <span class="n">kwargs</span><span class="p">[</span><span class="s">&#39;sxyz&#39;</span><span class="p">]</span>
+            <span class="n">checkSxyz</span><span class="p">(</span><span class="n">sxyz</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">sx</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sy</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sz</span> <span class="o">=</span> <span class="n">sxyz</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">sxyz</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">sxyz</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>      
+        
+    
+    <span class="k">def</span> <span class="nf">exportVoxelArrayToVTI</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outFile</span><span class="p">):</span>
+        
+        <span class="c"># Check input validity</span>
+        <span class="n">checkFilePath</span><span class="p">(</span><span class="n">outFile</span><span class="p">)</span>
+        <span class="n">checkSxyz</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">sx</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sy</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sz</span><span class="p">])</span>
+        <span class="n">checkV</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">V</span><span class="p">)</span>
+        <span class="c"># xl</span>
+        
+        <span class="c"># Create vtkImageData object for grey values voxel array</span>
+        <span class="k">print</span> <span class="s">&#39;Creating vtkImageData object for grey values voxel array...&#39;</span>
+        <span class="n">vtkV</span> <span class="o">=</span> <span class="n">nparray2vtkImageData</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">V</span><span class="p">,</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">xl</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">yl</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">zl</span><span class="p">),</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sx</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">sy</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">sz</span><span class="p">),</span> <span class="n">vtk</span><span class="o">.</span><span class="n">VTK_UNSIGNED_CHAR</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&#39;vtkImageData object created&#39;</span>
+        <span class="c"># Write grey values voxel array to file</span>
+        <span class="k">print</span> <span class="s">&#39;Saving VTI file for grey values voxel array {0} ...&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">outFile</span><span class="p">)</span>
+        <span class="n">vtkImageData2vti</span><span class="p">(</span><span class="n">outFile</span><span class="p">,</span> <span class="n">vtkV</span><span class="p">)</span>    
+        <span class="k">print</span> <span class="s">&#39;VTI file saved&#39;</span>        
+
+        
+    
+    <span class="k">def</span> <span class="nf">exportVoxelArraySilhouetteToVTI</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">outFile</span><span class="p">):</span>
+
+        <span class="c"># Check input validity</span>
+        <span class="n">checkFilePath</span><span class="p">(</span><span class="n">outFile</span><span class="p">)</span>
+        <span class="n">checkSxyz</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">sx</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sy</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">sz</span><span class="p">])</span>
+        <span class="n">checkV</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">internalV</span><span class="p">)</span>
+        
+        <span class="c"># Create vtkImageData object for silhouette voxel array</span>
+        <span class="k">print</span> <span class="s">&#39;Creating vtkImageData object for grey values voxel array...&#39;</span>
+        <span class="n">vtkInternalV</span> <span class="o">=</span> <span class="n">nparray2vtkImageData</span><span class="p">(</span><span class="mi">255</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">internalV</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">),</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">xl</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">yl</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">zl</span><span class="p">),</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sx</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">sy</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">sz</span><span class="p">),</span> <span class="n">vtk</span><span class="o">.</span><span class="n">VTK_UNSIGNED_CHAR</span><span class="p">)</span>
+        <span class="k">print</span> <span class="s">&#39;vtkImageData object created&#39;</span>
+        <span class="c"># Write silhouette voxel array to file</span>
+        <span class="k">print</span> <span class="s">&#39;Saving VTI file for silhouette voxel array {0} ...&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">outFile</span><span class="p">)</span>
+        <span class="n">vtkImageData2vti</span><span class="p">(</span><span class="n">outFile</span><span class="p">,</span> <span class="n">vtkInternalV</span><span class="p">)</span>    
+        <span class="k">print</span> <span class="s">&#39;VTI file saved&#39;</span>
+        
+        
+
+    <span class="k">def</span> <span class="nf">calculateProbeCalibrationPrecision</span><span class="p">(</span><span class="n">prec</span><span class="o">=</span><span class="s">&#39;RP&#39;</span><span class="p">):</span>
+        
+        <span class="c"># Check input validity</span>
+        <span class="n">checkPrecType</span><span class="p">(</span><span class="n">prec</span><span class="p">)</span>
+        <span class="n">checkPixel2mm</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmX</span><span class="p">)</span>
+        <span class="n">checkPixel2mm</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmY</span><span class="p">)</span>
+<span class="c">#        checkFreq(self.usFreq)</span>
+<span class="c">#        checkFreq(self.kineFreq)</span>
+<span class="c">#        checkFreqRatio(self.usFreq, self.kineFreq)</span>
+        <span class="n">checkIm2GlPose</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">R</span><span class="p">)</span>
+        <span class="n">checkFeatures</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">features</span><span class="p">)</span>
+        
+        <span class="c"># Calculate frequencies ratio</span>
+<span class="c">#        freqRatio = self.kineFreq / self.usFreq</span>
+        
+        <span class="c"># Calculate precision</span>
+        <span class="k">if</span> <span class="n">prec</span> <span class="o">==</span> <span class="s">&#39;RP&#39;</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s">&#39;Calculating reconstruction precision...&#39;</span>
+<span class="c">#            precValue = calculateRP(self.R[::freqRatio,:,:], self.pixel2mmX, self.pixel2mmY, self.features)</span>
+            <span class="n">precValue</span> <span class="o">=</span> <span class="n">calculateRP</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">R</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmX</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmY</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">features</span><span class="p">)</span>            
+            <span class="k">print</span> <span class="s">&#39;Precision calculated&#39;</span>
+        
+        <span class="c"># Set data internally</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prec</span><span class="p">[</span><span class="n">prec</span><span class="p">]</span> <span class="o">=</span> <span class="n">precValue</span>
+        
+    
+    
+    <span class="k">def</span> <span class="nf">getProbeCalibrationPrecision</span><span class="p">(</span><span class="n">prec</span><span class="o">=</span><span class="s">&#39;RP&#39;</span><span class="p">):</span>
+        
+        <span class="c"># Check input validity</span>
+        <span class="n">checkPrecType</span><span class="p">(</span><span class="n">prec</span><span class="p">)</span>
+        
+        <span class="c"># Get precision</span>
+        <span class="k">if</span> <span class="n">prec</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">prec</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;This precision type was not calculated yet&#39;</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">prec</span><span class="p">[</span><span class="n">prec</span><span class="p">]</span>
+        
+        
+    
+    <span class="k">def</span> <span class="nf">calculateProbeCalibrationAccuracy</span><span class="p">(</span><span class="n">acc</span><span class="o">=</span><span class="s">&#39;DA&#39;</span><span class="p">,</span> <span class="n">L</span><span class="o">=</span><span class="mi">80</span><span class="p">):</span>
+        
+        <span class="c"># Check input validity</span>
+        <span class="n">checkAccType</span><span class="p">(</span><span class="n">acc</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">acc</span> <span class="o">==</span> <span class="s">&#39;DA&#39;</span><span class="p">:</span>    
+            <span class="n">checkDist</span><span class="p">(</span><span class="n">L</span><span class="p">)</span>
+        <span class="n">checkPixel2mm</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmX</span><span class="p">)</span>
+        <span class="n">checkPixel2mm</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmY</span><span class="p">)</span>
+<span class="c">#        checkFreq(self.usFreq)</span>
+<span class="c">#        checkFreq(self.kineFreq)</span>
+<span class="c">#        checkFreqRatio(self.usFreq, self.kineFreq)</span>
+        <span class="n">checkIm2GlPose</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">R</span><span class="p">)</span>
+        <span class="n">checkFeatures</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">features</span><span class="p">)</span>
+        
+        <span class="c"># Calculate frequencies ratio</span>
+<span class="c">#        freqRatio = self.kineFreq / self.usFreq</span>
+        
+        <span class="c"># Calculate precision</span>
+        <span class="k">if</span> <span class="n">acc</span> <span class="o">==</span> <span class="s">&#39;DA&#39;</span><span class="p">:</span>
+            <span class="k">print</span> <span class="s">&#39;Calculating distance accuracy...&#39;</span>
+<span class="c">#            accValue = calculateDA(self.R[::freqRatio,:,:], self.pixel2mmX, self.pixel2mmY, self.features, L)</span>
+            <span class="n">accValue</span> <span class="o">=</span> <span class="n">calculateDA</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">R</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmX</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pixel2mmY</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">features</span><span class="p">,</span> <span class="n">L</span><span class="p">)</span>            
+            <span class="k">print</span> <span class="s">&#39;Accuracy calculated&#39;</span>
+        
+        <span class="c"># Set data internally</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">acc</span><span class="p">[</span><span class="n">acc</span><span class="p">]</span> <span class="o">=</span> <span class="n">accValue</span>
+        
+
+
+    <span class="k">def</span> <span class="nf">getProbeCalibrationAccuracy</span><span class="p">(</span><span class="n">acc</span><span class="o">=</span><span class="s">&#39;DA&#39;</span><span class="p">):</span>
+        
+        <span class="c"># Check input validity</span>
+        <span class="n">checkAccType</span><span class="p">(</span><span class="n">acc</span><span class="p">)</span>
+        
+        <span class="c"># Get accuracy</span>
+        <span class="k">if</span> <span class="n">acc</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">acc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s">&#39;This accuracy type was not calculated yet&#39;</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">acc</span><span class="p">[</span><span class="n">acc</span><span class="p">]</span>   
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    </div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../index.html">Py3DFreeHandUS 1.0 documentation</a> &raquo;</li>
+          <li><a href="index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, Davide Monari.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+    </div>
+  </body>
+</html>
